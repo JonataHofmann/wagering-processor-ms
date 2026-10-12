@@ -301,3 +301,32 @@ A política devolve o `FailureCode`, sem lançar; o fato "já revertida" é cons
 - `eventType` e `version` ficam no tipo de cada subclasse.
 - `data` é só JSON puro: `MoneyProps`, datas em ISO-8601, `null` em vez de `undefined`.
 - Cada `from` confere o estado: não há evento de transação pendente marcada como processada.
+
+### 6.11 Backoff exponencial
+
+`delay = min(teto, base × 2^(tentativa − 1))`, com **equal jitter**
+(espera sorteada entre a metade e o valor exponencial).
+
+- Equal jitter espalha os retries de várias instâncias sem nunca esperar zero.
+- A fonte de aleatoriedade é injetável; testes usam `jitter: 'none'`.
+- Reaproveitado na outbox (aqui), no consumer SQS (etapa 14) e nas pendências de referência (etapa 16).
+
+### 6.12 `InboxMessage` e `OutboxMessage`
+
+|                            | Inbox                                            | Outbox                                                     |
+| -------------------------- | ------------------------------------------------ | ---------------------------------------------------------- |
+| Papel                      | Registro de mensagem recebida já processada      | Evento à espera de publicação                              |
+| Criação                    | `receive` (valida ids e hash)                    | `enqueue(evento)` (payload = envelope do evento)           |
+| Estado                     | `processedAt`                                    | `attempts`, `nextAttemptAt`, `publishedAt`, `lastError`    |
+| Duplicata entre instâncias | PK `(consumer_name, message_id)` + `ON CONFLICT` | `UPDATE ... WHERE published_at IS NULL` + lease (etapa 15) |
+
+**Outbox sem limite de tentativas.** O enunciado proíbe perder eventos confirmados.
+O limite é sobre o intervalo (teto de 5 min), não sobre o número de tentativas.
+Evento que não sai fica visível pela métrica de lag e por `attempts`.
+
+- Evento recém-enfileirado já está vencido (`nextAttemptAt = occurredAt`).
+- O backoff conta a partir do momento da falha, não da data do evento.
+- `markPublished` e `markProcessed` repetidos são bug; a duplicata real entre
+  instâncias é resolvida no banco.
+- O lease dos relays (`locked_until`, `locked_by`) fica fora do domínio: é mecanismo
+  de coordenação em SQL.
