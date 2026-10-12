@@ -8,3 +8,11 @@ export class InsufficientFundsError extends DomainError {
     super(`insufficient funds: balance ${balance}, requested ${requested}`);
   }
 }
+
+export class WalletAlreadyExistsError extends DomainError {
+  readonly code = 'WALLET_ALREADY_EXISTS';
+
+  constructor(playerId: string, currency: string) {
+    super(`player ${playerId} already has a ${currency} wallet`);
+  }
+}
