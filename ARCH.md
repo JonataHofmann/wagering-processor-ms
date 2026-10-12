@@ -31,3 +31,16 @@ A FK composta é a forma mais direta de dizer “esta coluna precisa ser igual �
 
 
 
+### Money — interpretações adotadas
+- Entrada com 0 ou 1 casa decimal ("25", "25.5") é aceita e normalizada para 2 casas.
+  O enunciado proíbe mais de 2 casas; menos não é ambíguo. A forma canônica
+  ("25.00") é a única que circula internamente e entra no payloadHash.
+- Formatos ambíguos são rejeitados: sinal explícito, ".5", "5.", zeros à esquerda,
+  vírgula, espaços. Limite de 18 dígitos inteiros, igual ao domain do banco.
+- Negativos são proibidos na entrada (Money.from), mas permitidos como resultado
+  interno de subtract/negate, para que o domínio expresse "o saldo ficaria negativo?".
+- equals entre moedas diferentes devolve false; add, subtract e isLessThan lançam
+  CurrencyMismatchError.
+
+
+

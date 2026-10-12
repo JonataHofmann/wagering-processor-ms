@@ -1,0 +1,206 @@
+# ARCHITECTURE
+
+Serviço financeiro distribuído que processa transações de apostas (BET, WIN, LOSS, REFUND, ROLLBACK) recebidas de múltiplos provedores, via HTTP e SQS, com entrega at-least-once.
+
+A correção financeira é garantida pelo **PostgreSQL**, não pelo broker nem por memória. O código de domínio decide; o banco recusa qualquer estado inconsistente que escape do código.
+
+> Este documento cresce junto com a implementação. Decisões já implementadas estão marcadas como **Aceito**; decisões desenhadas mas ainda não implementadas, como **Proposto**.
+
+---
+
+## 1. Status da implementação
+
+| Fase                        | Etapa                                                 | Status    |
+| --------------------------- | ----------------------------------------------------- | --------- |
+| Fundação                    | 1. Repositório (Bun + NestJS + TypeScript estrito)    | Concluída |
+|                             | 2. Infraestrutura local (PostgreSQL + LocalStack SQS) | Concluída |
+|                             | 3. MikroORM e runner de migrations                    | Concluída |
+|                             | 4. Schema, constraints, triggers, permissões e testes | Concluída |
+| Domínio puro                | 5. `Money`                                            | Concluída |
+|                             | 6. `Wallet` e `WalletLedgerEntry`                     | Pendente  |
+|                             | 7. `WagerTransaction`                                 | Pendente  |
+|                             | 8. `InboxMessage` e `OutboxMessage`                   | Pendente  |
+| Persistência e casos de uso | 9 a 12                                                | Pendente  |
+| Instâncias e mensageria     | 13 a 16                                               | Pendente  |
+| Garantias finais            | 17 a 20                                               | Pendente  |
+| Entrega                     | 21 a 23                                               | Pendente  |
+
+---
+
+## 2. Stack
+
+| Item                                  | Escolha                    | Observação                                                                                       |
+| ------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------ |
+| Runtime, package manager, test runner | Bun 1.x                    | O Bun executa TypeScript mas não checa tipos: `bun run typecheck` (`tsc --noEmit`) é obrigatório |
+| Linguagem                             | TypeScript em modo estrito | `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`                                       |
+| Framework                             | NestJS                     | Usado só nas bordas (HTTP, DI, ciclo de vida). O domínio não depende dele                        |
+| Banco                                 | PostgreSQL 16              |                                                                                                  |
+| ORM                                   | MikroORM 7.2.5             | API do migrator: `orm.migrator`, `getExecuted()`, `getPending()`, `create()`                     |
+| Mensageria                            | AWS SQS via LocalStack 3.8 | Versão fixa; versões recentes da imagem exigem token                                             |
+| Dinheiro                              | `decimal.js`               | Encapsulado em `Money`; nunca exposto                                                            |
+| Orquestração local                    | Docker Compose             |                                                                                                  |
+
+---
+
+## 3. Visão geral da arquitetura
+
+```
+Provedores ──HTTP──▶ ┌──────────────────────────────────────────────┐
+                     │  App NestJS (mesma imagem, N réplicas)       │
+SQS ──────────────▶  │  papéis via APP_ROLES:                       │
+                     │  api · consumer · relay · scheduler          │
+                     │                                              │
+                     │  Application (casos de uso)                  │
+                     │  Domain (puro: Money, Wallet, Transaction)   │
+                     │  Infrastructure (MikroORM, SQS)              │
+                     └───────────────┬──────────────────────────────┘
+                                     ▼
+                     PostgreSQL: wallets · wager_transactions ·
+                     wallet_ledger_entries · inbox · outbox
+```
+
+- **Monólito modular** com N réplicas stateless (ADR-001).
+- **Arquitetura hexagonal**: domínio puro, casos de uso com portas, adaptadores na infraestrutura (ADR-002).
+- **Um único banco transacional**: saldo, ledger, transação, inbox e outbox mudam na mesma transação SQL.
+
+---
+
+## 4. Decisões arquiteturais
+
+### ADR-001 — Monólito modular com N réplicas stateless
+
+**Status:** VALIDAR
+
+**Contexto.** Saldo, ledger, transação, inbox e outbox precisam mudar atomicamente. O domínio tem um único bounded context transacional: a wallet.
+
+**Decisão.** Uma única imagem NestJS, em módulos (`wallet`, `wagering`, `messaging`, `shared`, `platform`). Cada réplica assume papéis via a variável `APP_ROLES` (`api`, `consumer`, `relay`, `scheduler`). Toda coordenação entre réplicas acontece no PostgreSQL.
+
+**Alternativa descartada.** Microsserviços separados para wallet e wagering exigiriam saga ou 2PC dentro de uma movimentação de saldo.
+
+**Consequências.** Atomicidade com uma transação local. Escala horizontal para wallets distintas; o limite passa a ser o PostgreSQL primário. Em produção, os papéis podem rodar em deployments separados sem mudança de código.
+
+### ADR-002 — Arquitetura hexagonal com domínio puro
+
+**Status:** Aceito (estrutura);
+
+**Decisão.**
+
+- Camadas por módulo: `domain` (sem imports de NestJS ou ORM), `application` (casos de uso e portas), `infrastructure` (adaptadores).
+- Construtores privados e factories estáticas (`from`, `create`, `open`, `rehydrate`). `rehydrate` reconstrói estado persistido sem revalidar transições.
+- Erros de regra de negócio herdam de `DomainError`, com `code` estável e legível por máquina.
+
+**Consequências.** O domínio é testado em milissegundos, sem banco. O custo é código de mapeamento entre domínio e persistência.
+
+### ADR-003 — MikroORM 7 com migrations escritas à mão
+
+**Status:** Aceito
+
+**Contexto.** O schema usa recursos que o gerador de migrations do ORM não expressa: domains com CHECK, índices únicos parciais, constraint triggers deferidos, GRANTs.
+
+**Decisão.**
+
+- Migrations escritas à mão (`snapshot: false`), uma por responsabilidade, todas com `up()` e `down()`.
+- `transactional: true` e `allOrNothing: true`: um lote de migrations aplica por inteiro ou não aplica.
+- `disableForeignKeys: false`: o modo padrão de desligar FKs no Postgres (`session_replication_role = replica`) também desligaria os triggers de integridade.
+- Runner programático (`scripts/migrate.ts`) em vez do CLI do Mikro, por compatibilidade com o Bun.
+- Regras de escrita: um statement por `addSql`, nenhum `?` no SQL.
+
+**Consequências.** Toda tabela nova exige migration manual e o GRANT correspondente.
+
+### ADR-004 — Representação monetária exata
+
+**Status:** Aceito
+
+**Decisão.**
+
+- `Money` imutável (`Object.freeze`), encapsulando um construtor `Decimal` isolado (`Decimal.clone`), sem alterar a configuração global do `decimal.js`.
+- A entrada é validada por regex **antes** de chegar ao `decimal.js`, que aceitaria `1e3`, `NaN` e `Infinity`.
+- Saída sempre com 2 casas (`"25.00"`). Somas e subtrações de valores com 2 casas são exatas; nada arredonda. `ROUND_HALF_EVEN` fica configurado para eventual uso futuro de divisão.
+- No banco: domain `money_amount` (`numeric` sem escala com `CHECK (scale(VALUE) <= 2)`) e `currency_code` (`char(3)` maiúsculo).
+- Contratos e eventos carregam `MoneyProps` (`{ amount: string, currency: string }`), nunca a instância.
+
+**Alternativas descartadas.**
+
+- `numeric(20,2)` arredonda silenciosamente `10.005` para `10.01`, escondendo bugs de parser.
+- Inteiro em centavos acopla a escala à moeda e exige conversão em cada borda.
+
+**Interpretações adotadas.**
+
+- Entrada com 0 ou 1 casa (`"25"`, `"25.5"`) é aceita e normalizada para 2 casas. O enunciado proíbe mais de 2 casas; menos não é ambíguo. A forma canônica é a única que circula internamente e entra no `payloadHash`.
+- Formatos ambíguos são rejeitados: sinal explícito, `.5`, `5.`, zeros à esquerda, vírgula, espaços. Limite de 18 dígitos inteiros, igual ao domain do banco.
+- Negativos são proibidos na entrada (`Money.from`) e permitidos como resultado interno de `subtract` e `negate`, para o domínio expressar "o saldo ficaria negativo?".
+- `equals` entre moedas diferentes devolve `false`; `add`, `subtract` e `isLessThan` lançam `CurrencyMismatchError`.
+- Moedas com 0 ou 3 casas decimais (JPY, KWD) exigiriam escala por moeda. Fora de escopo.
+
+### ADR-005 — Invariantes financeiras garantidas no schema
+
+**Status:** Aceito
+
+**Contexto.** O enunciado exige unicidade, imutabilidade e não-negatividade no banco, não apenas no código. Código tem bugs; com várias instâncias, unicidade só o banco garante.
+
+**Decisão.** O código governa, o banco garante:
+
+| Camada  | Papel                                                    | Quando age              |
+| ------- | -------------------------------------------------------- | ----------------------- |
+| Domínio | Decide e produz (saldo, lançamento, status, failureCode) | Sempre                  |
+| Banco   | Verifica e recusa                                        | Só quando o código erra |
+
+Os triggers **nunca escrevem dados**. Um erro `WL00x` em produção indica bug, não regra de negócio.
+
+Detalhes na seção 5.
+
+**Interpretação adotada.** Uma referência só pode ser revertida **uma vez no total**, por REFUND ou ROLLBACK. A leitura literal ("uma vez por tipo de operação") permitiria REFUND seguido de ROLLBACK da mesma BET, creditando o valor duas vezes e violando a invariante global de não duplicar créditos.
+
+**Consequências.** Custo de alguns lookups por índice único a cada escrita financeira. Erros `WL002` surgem no COMMIT, então o tratamento de erro precisa envolver o commit.
+
+### ADR-006 — Dois roles no banco (menor privilégio)
+
+**Status:** REVISAR
+
+**Contexto.** O `POSTGRES_USER` da imagem é superusuário e ignora GRANTs.
+
+**Decisão.**
+
+- `wagering_owner`: dono do schema; usado só pelas migrations (`DATABASE_MIGRATION_URL`).
+- `wagering_app`: único role usado em runtime (`DATABASE_URL`), criado por `docker/postgres/init/01-roles.sql` sem privilégios; recebe só o necessário na migration 4.
+- O role é criado no init do container (é do cluster, não do banco); as permissões por tabela ficam na migration (dependem das tabelas).
+- Sem `ALTER DEFAULT PRIVILEGES`: cada tabela nova recebe GRANT explícito.
+
+**Consequências.** O ledger fica protegido por duas camadas independentes: permissão (`42501`) e trigger (`WL001`).
+
+#### Portas compartilhadas
+
+| Porta                | Implementação                          | Fake de teste                   |
+| -------------------- | -------------------------------------- | ------------------------------- |
+| `Clock`              | `SystemClock`                          | `FixedClock` (tempo controlado) |
+| `IdGenerator`        | `UuidV7Generator` (`Bun.randomUUIDv7`) | `SequentialIdGenerator`         |
+| `TransactionManager` | etapa 9 (MikroORM)                     | —                               |
+
+Cada porta exporta um token `Symbol` para injeção no Nest, sem importar o Nest.
+
+#### Hash canônico
+
+`payloadHash = SHA-256(JCS(payload))`, em hex minúsculo de 64 caracteres (RFC 8785).
+
+- Chaves ordenadas por unidade UTF-16; sem espaços; propriedades `undefined` omitidas.
+- Rejeita o que não é JSON puro (`NaN`, `Infinity`, `Date`, `Money`, classes):
+  a conversão para JSON é explícita, para o hash nunca depender de um `toJSON` implícito.
+- Os campos que entram no hash são definidos pelo caso de uso (etapa 11).
+
+#### UUIDv7
+
+Ids ordenáveis pelo tempo: inserções sempre no fim dos índices B-tree,
+sem colisão entre instâncias.
+
+### ADR-007 — Testes com infraestrutura real e banco isolado por suíte
+
+**Status:** Aceito
+
+**Decisão.**
+
+- Testes de integração contra PostgreSQL real (e LocalStack, a partir da etapa 14). Nenhum mock de banco ou fila.
+- Um banco por suíte: o helper migra um template (`wagering_test_template`) uma vez por execução e copia com `CREATE DATABASE ... TEMPLATE` para cada arquivo de teste.
+- Testes de schema conectam como `wagering_app` e comparam SQLSTATEs, não mensagens.
+- Cada teste de constraint viola **uma única regra**, para não depender da ordem interna de verificação do Postgres.
+
+**Alternativas descartadas.** `TRUNCATE` entre testes é impossível (o ledger o bloqueia por design). Transação desfeita por teste não serve para concorrência nem para triggers deferidos.
