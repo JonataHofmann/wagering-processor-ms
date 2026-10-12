@@ -168,6 +168,36 @@ Detalhes na seção 5.
 
 **Consequências.** O ledger fica protegido por duas camadas independentes: permissão (`42501`) e trigger (`WL001`).
 
+### ADR-009 — Camada de aplicação e contrato HTTP de erros
+
+**Status:** Aceito (wallets); estendido na etapa 11 (transações)
+
+**Decisão.**
+
+- Casos de uso são classes puras, montadas pelos módulos Nest via `useFactory`
+  e injetadas pelos tokens das portas.
+- `PersistenceModule` global compõe ORM, transação, relógio, ids e repositórios.
+  `AppModule.register({ databaseUrl })` recebe a configuração por parâmetro.
+- `@mikro-orm/nestjs` não é usado: o `MikroORM` vem de um provider próprio,
+  fechado no shutdown (`OnApplicationShutdown`).
+- Validação de entrada com `RequestParser`, que reúne todas as violações;
+  o formato do dinheiro continua sendo responsabilidade do `Money`.
+- Um filtro global traduz qualquer erro, de forma consistente em todos os endpoints:
+
+| Situação            | Status              | `error.code`                                              |
+| ------------------- | ------------------- | --------------------------------------------------------- |
+| Entrada inválida    | 400                 | `VALIDATION_ERROR` (com `details`), `INVALID_AMOUNT`, ... |
+| Recurso inexistente | 404                 | `WALLET_NOT_FOUND`                                        |
+| Conflito            | 409                 | `WALLET_ALREADY_EXISTS`, `IDEMPOTENCY_KEY_REUSED`         |
+| Regra de negócio    | 422                 | o `failureCode`                                           |
+| Falha transitória   | 503 + `Retry-After` | `TEMPORARILY_UNAVAILABLE`                                 |
+| Bug                 | 500                 | `INTERNAL_ERROR`, sem detalhes                            |
+
+- Ledger paginado por cursor opaco (`base64url` de `{"v": walletVersion}`),
+  buscando `limit + 1` para saber se há próxima página.
+
+**Consequências.** A etapa 11 só acrescenta códigos à tabela do filtro.
+
 ## 6. Domínio e componentes compartilhados
 
 ### 6.1 Erros do domínio
@@ -330,3 +360,11 @@ Evento que não sai fica visível pela métrica de lag e por `attempts`.
   instâncias é resolvida no banco.
 - O lease dos relays (`locked_until`, `locked_by`) fica fora do domínio: é mecanismo
   de coordenação em SQL.
+
+### 6.13 `CreateWallet`
+
+Em uma única transação: wallet (v1) + transação OPENING (PROCESSED) + lançamento CREDIT
+
+- eventos `WagerTransactionProcessed` e `WalletBalanceChanged`.
+  Saldo inicial zero: só a wallet, sem OPENING, lançamento ou evento.
+  Duplicata de jogador + moeda: a `UNIQUE` do banco decide, mesmo sob concorrência (409).
