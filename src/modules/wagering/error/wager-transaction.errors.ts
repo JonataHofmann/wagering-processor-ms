@@ -23,3 +23,13 @@ export class InvalidTransactionStateError extends InvariantViolationError {
     this.name = 'InvalidTransactionStateError';
   }
 }
+
+export class DuplicateWagerTransactionError extends DomainError {
+  readonly code = 'DUPLICATE_TRANSACTION';
+
+  constructor(public readonly idempotencyKey: string) {
+    super(
+      `a transaction with idempotency key ${idempotencyKey} already exists`,
+    );
+  }
+}
