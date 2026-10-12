@@ -198,6 +198,49 @@ Detalhes na seção 5.
 
 **Consequências.** A etapa 11 só acrescenta códigos à tabela do filtro.
 
+### ADR-010 — Concorrência: lock pessimista por wallet
+
+**Status:** Aceito
+
+**Decisão.** `SELECT ... FOR UPDATE` na wallet no início da transação, em `READ COMMITTED`,
+com `lock_timeout` de 2 s. Todas as leituras da decisão (idempotência, referência,
+reversão já feita, saldo) acontecem com a wallet travada. `UPDATE ... WHERE version = ?`
+permanece como defesa em profundidade.
+
+**Por que não otimista.** A contenção na mesma wallet é o caso normal (reenvios do provedor,
+BET e WIN da mesma rodada, 50 requisições idênticas). O otimista geraria tempestades de retry,
+exigiria um limite de tentativas que vira erro sob carga legítima, e a `version` (que só muda
+com o saldo) não protegeria decisões sem movimento, como rejeições e PENDING_REFERENCE.
+
+**Por que é seguro.** Uma wallet por transação: sem deadlock. Transação curta e sem I/O de rede.
+Lock por linha, nunca global: wallets diferentes rodam em paralelo.
+
+**Limite.** Serializa cada wallet: algumas centenas de operações por segundo por wallet.
+
+### ADR-011 — Idempotência
+
+**Status:** Aceito
+
+**Decisão.**
+
+1. Fast path sem lock: key existente → replay (mesmo hash) ou 409 (hash diferente).
+2. Sob o lock: re-checagem da key (quem esperou o lock pode ter perdido a corrida).
+3. Corrida entre wallets diferentes com a mesma key: a `UNIQUE (idempotency_key)` decide;
+   o perdedor relê e responde replay ou 409.
+4. Toda decisão é persistida, inclusive REJECTED e PENDING_REFERENCE, com o saldo observado:
+   o replay devolve a resposta original, com o saldo da época.
+
+**payloadHash.** SHA-256 (hex) de JSON canônico RFC 8785 sobre: providerId,
+externalTransactionId, playerId, walletId, roundId, gameId, kind, money (amount com 2 casas,
+currency) e referenceExternalTransactionId (vazio = ausente). Fora: o header
+Idempotency-Key, correlationId, messageId e qualquer metadado de transporte.
+
+**Interpretações.**
+
+- WALLET_NOT_FOUND responde 404 e não é persistido (não há wallet para a FK nem para o lock).
+- WALLET_PLAYER_MISMATCH é persistido, mas a resposta não traz o saldo da wallet alheia.
+- O mesmo (providerId, externalTransactionId) com outra key responde 409 DUPLICATE_TRANSACTION.
+
 ## 6. Domínio e componentes compartilhados
 
 ### 6.1 Erros do domínio
@@ -368,3 +411,18 @@ Em uma única transação: wallet (v1) + transação OPENING (PROCESSED) + lanç
 - eventos `WagerTransactionProcessed` e `WalletBalanceChanged`.
   Saldo inicial zero: só a wallet, sem OPENING, lançamento ou evento.
   Duplicata de jogador + moeda: a `UNIQUE` do banco decide, mesmo sob concorrência (409).
+
+### 6.14 `ProcessWagerTransaction`
+
+Ordem da decisão, sob o lock: dono da wallet → moeda → referência (ausente: PENDING_REFERENCE;
+inválida: código da política) → LOSS (processa sem movimento) → saldo (débito sem saldo:
+INSUFFICIENT_FUNDS ou REVERSAL_INSUFFICIENT_FUNDS) → movimento.
+
+| Resultado | HTTP | Eventos |
+|---|---|---|
+| PROCESSED com movimento | 200 | `WagerTransactionProcessed` + `WalletBalanceChanged` |
+| PROCESSED (LOSS) | 200 | `WagerTransactionProcessed` |
+| REJECTED | 422 | `WagerTransactionRejected` |
+| PENDING_REFERENCE | 202 | `WagerTransactionPendingReference` |
+
+O mesmo caso de uso atende HTTP e SQS (`causationId` = messageId).
