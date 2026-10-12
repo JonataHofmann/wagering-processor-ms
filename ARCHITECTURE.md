@@ -168,43 +168,40 @@ Detalhes na seção 5.
 
 **Consequências.** O ledger fica protegido por duas camadas independentes: permissão (`42501`) e trigger (`WL001`).
 
-
-
-
 ## 6. Domínio e componentes compartilhados
 
 ### 6.1 Erros do domínio
 
-| Tipo | Exemplos | Significado | Tratamento |
-|---|---|---|---|
-| `DomainError` | `INSUFFICIENT_FUNDS`, `CURRENCY_MISMATCH`, `INVALID_AMOUNT` | Situação de negócio prevista | Transação REJECTED com `failureCode`, HTTP 422 |
-| `InvariantViolationError` | Lançamento desbalanceado, movimento de valor zero | Bug | Erro interno e alarme; nunca vira rejeição |
+| Tipo                      | Exemplos                                                    | Significado                  | Tratamento                                     |
+| ------------------------- | ----------------------------------------------------------- | ---------------------------- | ---------------------------------------------- |
+| `DomainError`             | `INSUFFICIENT_FUNDS`, `CURRENCY_MISMATCH`, `INVALID_AMOUNT` | Situação de negócio prevista | Transação REJECTED com `failureCode`, HTTP 422 |
+| `InvariantViolationError` | Lançamento desbalanceado, movimento de valor zero           | Bug                          | Erro interno e alarme; nunca vira rejeição     |
 
 `InvariantViolationError` estende `Error`, não `DomainError`: um tratamento do tipo
 `if (error instanceof DomainError) rejeitar()` nunca transforma um bug em rejeição de negócio.
 
 ### 6.2 `Money`
 
-| Método | Comportamento |
-|---|---|
-| `Money.from(props)` | Valida e normaliza; lança `InvalidMoneyError` (`INVALID_AMOUNT` / `INVALID_CURRENCY`) |
-| `Money.zero(currency)` | Zero na moeda |
-| `add`, `subtract` | Exatos; lançam `CurrencyMismatchError` entre moedas diferentes |
-| `negate` | Inverte o sinal; `-0` é normalizado para `0.00` |
-| `isZero`, `isPositive`, `isNegative`, `isLessThan`, `equals` | Consultas |
-| `amount` | String com 2 casas, usada na persistência |
-| `toJSON()` | `MoneyProps` |
-| `toString()` | `"25.00 BRL"`, para logs |
+| Método                                                       | Comportamento                                                                         |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `Money.from(props)`                                          | Valida e normaliza; lança `InvalidMoneyError` (`INVALID_AMOUNT` / `INVALID_CURRENCY`) |
+| `Money.zero(currency)`                                       | Zero na moeda                                                                         |
+| `add`, `subtract`                                            | Exatos; lançam `CurrencyMismatchError` entre moedas diferentes                        |
+| `negate`                                                     | Inverte o sinal; `-0` é normalizado para `0.00`                                       |
+| `isZero`, `isPositive`, `isNegative`, `isLessThan`, `equals` | Consultas                                                                             |
+| `amount`                                                     | String com 2 casas, usada na persistência                                             |
+| `toJSON()`                                                   | `MoneyProps`                                                                          |
+| `toString()`                                                 | `"25.00 BRL"`, para logs                                                              |
 
 Decisões e interpretações: ADR-004.
 
 ### 6.3 Portas compartilhadas
 
-| Porta | Implementação | Fake de teste |
-|---|---|---|
-| `Clock` | `SystemClock` | `FixedClock` (tempo controlado) |
-| `IdGenerator` | `UuidV7Generator` (`Bun.randomUUIDv7`) | `SequentialIdGenerator` |
-| `TransactionManager` | etapa 9 (MikroORM) | — |
+| Porta                | Implementação                          | Fake de teste                   |
+| -------------------- | -------------------------------------- | ------------------------------- |
+| `Clock`              | `SystemClock`                          | `FixedClock` (tempo controlado) |
+| `IdGenerator`        | `UuidV7Generator` (`Bun.randomUUIDv7`) | `SequentialIdGenerator`         |
+| `TransactionManager` | etapa 9 (MikroORM)                     | —                               |
 
 Cada porta exporta um token `Symbol` para injeção no Nest, sem importar o Nest.
 O domínio nunca gera ids nem lê o relógio: recebe ambos da camada de aplicação.
@@ -240,3 +237,67 @@ sem colisão entre instâncias.
 
 A wallet não distingue débito de aposta e de reversão: o caso de uso traduz
 `INSUFFICIENT_FUNDS` para `REVERSAL_INSUFFICIENT_FUNDS` quando o débito vem de um ROLLBACK.
+
+### 6.7 `WagerTransaction`
+
+| De                          | Ação                                | Para                                 |
+| --------------------------- | ----------------------------------- | ------------------------------------ |
+| PENDING                     | `markProcessed` / `reject` / `fail` | PROCESSED / REJECTED / FAILED        |
+| PENDING                     | `markPendingReference`              | PENDING_REFERENCE                    |
+| PENDING_REFERENCE           | `rescheduleReferenceLookup`         | PENDING_REFERENCE (`attempts` + 1)   |
+| PENDING_REFERENCE           | `markProcessed` / `reject` / `fail` | PROCESSED / REJECTED / FAILED        |
+| PROCESSED, REJECTED, FAILED | qualquer                            | `InvalidTransactionStateError` (bug) |
+
+- `create` valida o payload: OPENING e o provider `system` são reservados; REFUND/ROLLBACK
+  exigem referência; BET/LOSS não aceitam; valor zero é recusado. Esses erros são
+  `InvalidWagerTransactionError` (HTTP 400) e não são persistidos.
+- `createOpening` é o único caminho para criar OPENING (caso de uso de criar wallet).
+- `markProcessed` e `reject` recebem o saldo observado (`balanceSnapshot`), devolvido no replay.
+- `reject` só aceita códigos de rejeição; `fail`, só códigos de falha.
+- `ledgerDirectionFor`: BET debita; OPENING, WIN e REFUND creditam; ROLLBACK inverte a referência;
+  LOSS não tem direção.
+- `insufficientFundsFailureCode()`: `REVERSAL_INSUFFICIENT_FUNDS` para ROLLBACK,
+  `INSUFFICIENT_FUNDS` para o resto.
+
+### 6.8 Política de referência
+
+| Transação | Pode referenciar |
+| --------- | ---------------- |
+| WIN       | BET (opcional)   |
+| REFUND    | BET              |
+| ROLLBACK  | BET, WIN, REFUND |
+
+Ordem de avaliação: tipo → contexto (provider, player, wallet, moeda, rodada) →
+referência PROCESSED → valor igual (só reversões) → ainda não revertida (só reversões).
+A política devolve o `FailureCode`, sem lançar; o fato "já revertida" é consultado pelo caso de uso.
+
+### 6.9 `FailureCode`
+
+| Código                        | Status           | Ação do provedor |
+| ----------------------------- | ---------------- | ---------------- |
+| `INSUFFICIENT_FUNDS`          | REJECTED         | Desistir         |
+| `REVERSAL_INSUFFICIENT_FUNDS` | REJECTED         | Escalar          |
+| `CURRENCY_MISMATCH`           | REJECTED         | Corrigir payload |
+| `WALLET_NOT_FOUND`            | (não persistido) | Corrigir payload |
+| `WALLET_PLAYER_MISMATCH`      | REJECTED         | Corrigir payload |
+| `REFERENCE_NOT_FOUND`         | REJECTED         | Escalar          |
+| `REFERENCE_CONTEXT_MISMATCH`  | REJECTED         | Corrigir payload |
+| `REFERENCE_INVALID_KIND`      | REJECTED         | Corrigir payload |
+| `REFERENCE_NOT_PROCESSED`     | REJECTED         | Desistir         |
+| `REFERENCE_ALREADY_REVERSED`  | REJECTED         | Desistir         |
+| `AMOUNT_MISMATCH`             | REJECTED         | Corrigir payload |
+| `INFRA_RETRIES_EXHAUSTED`     | FAILED           | Reenviar depois  |
+
+### 6.10 Eventos de integração
+
+| Evento                             | Quando                                      | Módulo   |
+| ---------------------------------- | ------------------------------------------- | -------- |
+| `WagerTransactionProcessed`        | Qualquer transação aplicada, inclusive LOSS | wagering |
+| `WagerTransactionRejected`         | Rejeição de negócio                         | wagering |
+| `WagerTransactionPendingReference` | Referência ausente                          | wagering |
+| `WalletBalanceChanged`             | Somente quando o saldo muda                 | wallet   |
+
+- `aggregateId` é sempre o `walletId` (vira `MessageGroupId` no SQS FIFO).
+- `eventType` e `version` ficam no tipo de cada subclasse.
+- `data` é só JSON puro: `MoneyProps`, datas em ISO-8601, `null` em vez de `undefined`.
+- Cada `from` confere o estado: não há evento de transação pendente marcada como processada.
