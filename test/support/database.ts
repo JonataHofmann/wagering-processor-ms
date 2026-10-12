@@ -43,6 +43,7 @@ export async function runMigrations(
     ...config,
     clientUrl: databaseUrl,
     debug: false,
+    migrations: { ...config.migrations, silent: true },
   });
   try {
     if (direction === 'up') await orm.migrator.up();
