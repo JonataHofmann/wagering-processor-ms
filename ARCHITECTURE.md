@@ -167,6 +167,7 @@ Detalhes na seção 5.
 - Sem `ALTER DEFAULT PRIVILEGES`: cada tabela nova recebe GRANT explícito.
 
 **Consequências.** O ledger fica protegido por duas camadas independentes: permissão (`42501`) e trigger (`WL001`).
+
 ### ADR-007 — Estratégia de testes: infraestrutura real, banco isolado e concorrência verificada
 
 **Status:** Aceito (camadas unitária, schema, persistência, HTTP e concorrência em um processo);
@@ -183,13 +184,13 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
 
 1. **Pirâmide em camadas, cada uma provando o que só ela pode provar.**
 
-| Camada | Pasta | Infraestrutura | Prova |
-|---|---|---|---|
-| Unitária | `test/unit` | Nenhuma | Regras do domínio: `Money`, `Wallet`, `WagerTransaction`, política de referência, backoff, hash canônico, eventos |
-| Schema | `test/integration/schema` | PostgreSQL | O banco sozinho recusa estados inválidos: constraints, triggers, permissões, migrations reversíveis |
-| Persistência | `test/integration/persistence` | PostgreSQL | Ida e volta domínio ↔ banco, transação, lock, atomicidade entre repositórios |
-| HTTP | `test/integration/http` | PostgreSQL + aplicação Nest real | Contrato da API, status HTTP, idempotência, regras de negócio de ponta a ponta |
-| Concorrência | `test/concurrency` | PostgreSQL + aplicação Nest real | Corridas reais: serialização por wallet, idempotência sob disputa, lock timeout |
+| Camada       | Pasta                          | Infraestrutura                   | Prova                                                                                                             |
+| ------------ | ------------------------------ | -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Unitária     | `test/unit`                    | Nenhuma                          | Regras do domínio: `Money`, `Wallet`, `WagerTransaction`, política de referência, backoff, hash canônico, eventos |
+| Schema       | `test/integration/schema`      | PostgreSQL                       | O banco sozinho recusa estados inválidos: constraints, triggers, permissões, migrations reversíveis               |
+| Persistência | `test/integration/persistence` | PostgreSQL                       | Ida e volta domínio ↔ banco, transação, lock, atomicidade entre repositórios                                      |
+| HTTP         | `test/integration/http`        | PostgreSQL + aplicação Nest real | Contrato da API, status HTTP, idempotência, regras de negócio de ponta a ponta                                    |
+| Concorrência | `test/concurrency`             | PostgreSQL + aplicação Nest real | Corridas reais: serialização por wallet, idempotência sob disputa, lock timeout                                   |
 
 2. **Infraestrutura real, nunca simulada.**
    - Testes de integração e concorrência rodam contra o PostgreSQL do Docker Compose
@@ -250,65 +251,66 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
 
 **Helpers de teste.**
 
-| Helper | Papel |
-|---|---|
-| `test/support/database.ts` | Template, banco isolado por suíte, `runMigrations` |
-| `test/support/pg.ts` | `inTx`, `sqlState`, `queryOnce` |
-| `test/support/schema-fixtures.ts` | Dados válidos direto no banco para os testes de schema |
-| `test/support/persistence.ts` | `createPersistence` (banco próprio) e `connectPersistence` (banco compartilhado com a aplicação) |
-| `test/support/http-app.ts` | Sobe a aplicação real contra um banco isolado |
-| `test/support/wagering-client.ts` | Cliente da API reutilizado por HTTP e concorrência |
-| `test/support/invariants.ts` | Invariante saldo = ledger para todas as wallets |
-| `test/support/fakes.ts` | `FixedClock`, `SequentialIdGenerator` |
-| `scripts/checks/sql/*.sql` | Roteiros manuais de verificação do schema (depuração e apresentação) |
+| Helper                            | Papel                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `test/support/database.ts`        | Template, banco isolado por suíte, `runMigrations`                                               |
+| `test/support/pg.ts`              | `inTx`, `sqlState`, `queryOnce`                                                                  |
+| `test/support/schema-fixtures.ts` | Dados válidos direto no banco para os testes de schema                                           |
+| `test/support/persistence.ts`     | `createPersistence` (banco próprio) e `connectPersistence` (banco compartilhado com a aplicação) |
+| `test/support/http-app.ts`        | Sobe a aplicação real contra um banco isolado                                                    |
+| `test/support/wagering-client.ts` | Cliente da API reutilizado por HTTP e concorrência                                               |
+| `test/support/invariants.ts`      | Invariante saldo = ledger para todas as wallets                                                  |
+| `test/support/fakes.ts`           | `FixedClock`, `SequentialIdGenerator`                                                            |
+| `scripts/checks/sql/*.sql`        | Roteiros manuais de verificação do schema (depuração e apresentação)                             |
 
 **Matriz de concorrência (etapa 12).**
 
-| Cenário | O que prova |
-|---|---|
-| 100.00 com duas apostas de 80.00 | Uma PROCESSED, uma REJECTED, saldo 20.00, um débito |
-| 30 apostas de 10.00 sobre 100.00 | 10 aceitas e saldos observados únicos: decisões serializadas |
-| BET, WIN e LOSS simultâneos | Saldo final = soma exata das operações aceitas |
-| A mesma aposta 50 vezes | Um débito, 49 replays, um único `transactionId` |
-| A mesma key em wallets diferentes | A `UNIQUE` decide; as perdedoras recebem 409 |
-| REFUNDs simultâneos da mesma BET | Só um devolve; os demais `REFERENCE_ALREADY_REVERSED` |
-| Criação simultânea da mesma wallet | Uma 201, as demais 409 |
-| 20 wallets em paralelo | Cada uma fecha certo, independentemente |
-| Wallet A travada, aposta em B | B responde na hora: o lock é por wallet, nunca global |
-| Espera além do `lock_timeout` | 503 + `Retry-After`, nada gravado, o reenvio processa |
+| Cenário                            | O que prova                                                  |
+| ---------------------------------- | ------------------------------------------------------------ |
+| 100.00 com duas apostas de 80.00   | Uma PROCESSED, uma REJECTED, saldo 20.00, um débito          |
+| 30 apostas de 10.00 sobre 100.00   | 10 aceitas e saldos observados únicos: decisões serializadas |
+| BET, WIN e LOSS simultâneos        | Saldo final = soma exata das operações aceitas               |
+| A mesma aposta 50 vezes            | Um débito, 49 replays, um único `transactionId`              |
+| A mesma key em wallets diferentes  | A `UNIQUE` decide; as perdedoras recebem 409                 |
+| REFUNDs simultâneos da mesma BET   | Só um devolve; os demais `REFERENCE_ALREADY_REVERSED`        |
+| Criação simultânea da mesma wallet | Uma 201, as demais 409                                       |
+| 20 wallets em paralelo             | Cada uma fecha certo, independentemente                      |
+| Wallet A travada, aposta em B      | B responde na hora: o lock é por wallet, nunca global        |
+| Espera além do `lock_timeout`      | 503 + `Retry-After`, nada gravado, o reenvio processa        |
 
 **Cobertura dos testes obrigatórios do enunciado.**
 
-| Exigido | Situação |
-|---|---|
-| Operações e validações de `Money` (escala, arredondamento, entradas inválidas) | Coberto (unitário) |
-| Invariantes da `Wallet` | Coberto (unitário) |
-| Regras de BET, WIN, LOSS, REFUND, ROLLBACK | Coberto (unitário e HTTP) |
-| Conflito de moeda | Coberto (unitário e HTTP) |
-| Idempotency key com payload divergente | Coberto (unitário e HTTP) |
-| Migrations e constraints | Coberto (schema) |
-| Atomicidade entre wallet, ledger, inbox e outbox | Coberto (persistência e HTTP) |
-| A mesma aposta 50 vezes em paralelo | Coberto (concorrência) |
-| Disputa pelo saldo da mesma wallet | Coberto (concorrência) |
-| Wallets distintas em paralelo | Coberto (concorrência) |
-| ≥ 3 processos ou instâncias | Etapa 13 |
-| Inbox, redelivery, retry e DLQ | Etapa 14 |
-| Worker morto depois do commit e antes do ack | Etapa 14 |
-| Publishers concorrentes sobre a mesma outbox | Etapa 15 |
-| ROLLBACK ou REFUND antes da referência (processamento posterior) | Etapa 16 |
-| Reinício do serviço com consistência final | Etapa 18 |
+| Exigido                                                                        | Situação                      |
+| ------------------------------------------------------------------------------ | ----------------------------- |
+| Operações e validações de `Money` (escala, arredondamento, entradas inválidas) | Coberto (unitário)            |
+| Invariantes da `Wallet`                                                        | Coberto (unitário)            |
+| Regras de BET, WIN, LOSS, REFUND, ROLLBACK                                     | Coberto (unitário e HTTP)     |
+| Conflito de moeda                                                              | Coberto (unitário e HTTP)     |
+| Idempotency key com payload divergente                                         | Coberto (unitário e HTTP)     |
+| Migrations e constraints                                                       | Coberto (schema)              |
+| Atomicidade entre wallet, ledger, inbox e outbox                               | Coberto (persistência e HTTP) |
+| A mesma aposta 50 vezes em paralelo                                            | Coberto (concorrência)        |
+| Disputa pelo saldo da mesma wallet                                             | Coberto (concorrência)        |
+| Wallets distintas em paralelo                                                  | Coberto (concorrência)        |
+| ≥ 3 processos ou instâncias                                                    | Etapa 13                      |
+| Inbox, redelivery, retry e DLQ                                                 | Etapa 14                      |
+| Worker morto depois do commit e antes do ack                                   | Etapa 14                      |
+| Publishers concorrentes sobre a mesma outbox                                   | Etapa 15                      |
+| ROLLBACK ou REFUND antes da referência (processamento posterior)               | Etapa 16                      |
+| Reinício do serviço com consistência final                                     | Etapa 18                      |
 
 **Comandos.**
 
-| Comando | Roda |
-|---|---|
-| `bun run test:unit` | Domínio, sem infraestrutura |
-| `bun run test:integration` | Schema, persistência e HTTP |
-| `bun run test:concurrency` | Corridas em um processo |
+| Comando                                                                | Roda                         |
+| ---------------------------------------------------------------------- | ---------------------------- |
+| `bun run test:unit`                                                    | Domínio, sem infraestrutura  |
+| `bun run test:integration`                                             | Schema, persistência e HTTP  |
+| `bun run test:concurrency`                                             | Corridas em um processo      |
 | `CONCURRENCY_ITERATIONS=50 bun test --timeout 300000 test/concurrency` | Corridas com mais repetições |
-| `MIKRO_ORM_DEBUG=true bun run test:concurrency` | Idem, mostrando as queries |
+| `MIKRO_ORM_DEBUG=true bun run test:concurrency`                        | Idem, mostrando as queries   |
 
 **Alternativas descartadas.**
+
 - **Mocks de banco ou de repositório nos testes de integração:** proibido pelo enunciado e
   incapaz de provar constraints, triggers, locks e atomicidade.
 - **`TRUNCATE` entre testes:** impossível por design, porque o ledger bloqueia TRUNCATE.
@@ -318,12 +320,14 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
   incerto no Bun. O template no mesmo PostgreSQL dá isolamento equivalente em milissegundos.
 
 **Consequências.**
+
 - A suíte de integração e concorrência exige Docker em execução e leva segundos, não
   milissegundos.
 - Em troca, cada garantia avaliada pelo enunciado tem um teste que falharia se ela quebrasse,
   executado contra a mesma infraestrutura que a produção usaria.
 - Um banco esquecido por um teste interrompido (`Ctrl+C`) pode sobrar; a limpeza manual está
   documentada no README.
+
 ### ADR-009 — Camada de aplicação e contrato HTTP de erros
 
 **Status:** Aceito (wallets); estendido na etapa 11 (transações)
@@ -396,6 +400,31 @@ Idempotency-Key, correlationId, messageId e qualquer metadado de transporte.
 - WALLET_NOT_FOUND responde 404 e não é persistido (não há wallet para a FK nem para o lock).
 - WALLET_PLAYER_MISMATCH é persistido, mas a resposta não traz o saldo da wallet alheia.
 - O mesmo (providerId, externalTransactionId) com outra key responde 409 DUPLICATE_TRANSACTION.
+
+### ADR-012 — Múltiplas instâncias sem estado em memória
+
+**Status:** Aceito
+
+**Decisão.**
+
+- A aplicação não guarda estado de negócio em memória: idempotência, lock e saldo vivem no
+  PostgreSQL. Qualquer réplica atende qualquer requisição, inclusive o replay de uma
+  operação processada por outra.
+- Imagem Docker em dois estágios (dependências de produção + runtime), Bun em versão fixa,
+  usuário sem privilégios.
+- Docker Compose: `migrator` aplica as migrations uma vez e encerra; três réplicas
+  (`app-1`..`app-3`) só sobem depois dele; nginx faz rodízio simples, sem afinidade de sessão.
+- O nginx não reenvia POST para outra réplica: o reenvio é decisão do cliente,
+  protegido pela Idempotency-Key.
+
+**Verificação.** `test/concurrency/multi-instance.test.ts` sobe três processos
+`bun src/main.ts` separados (cada um com seu pool), sobre o mesmo banco isolado, e repete
+as corridas distribuindo as requisições em rodízio: 100/80/80, a mesma aposta 60 vezes,
+30 apostas disputando o saldo, REFUNDs simultâneos, criação simultânea da mesma wallet,
+wallets independentes e replay por instância diferente da que processou.
+
+**Consequências.** Escalar a API é aumentar réplicas. O limite passa a ser o PostgreSQL
+primário e, por wallet, o lock de linha (ADR-010).
 
 ## 6. Domínio e componentes compartilhados
 
@@ -574,11 +603,11 @@ Ordem da decisão, sob o lock: dono da wallet → moeda → referência (ausente
 inválida: código da política) → LOSS (processa sem movimento) → saldo (débito sem saldo:
 INSUFFICIENT_FUNDS ou REVERSAL_INSUFFICIENT_FUNDS) → movimento.
 
-| Resultado | HTTP | Eventos |
-|---|---|---|
-| PROCESSED com movimento | 200 | `WagerTransactionProcessed` + `WalletBalanceChanged` |
-| PROCESSED (LOSS) | 200 | `WagerTransactionProcessed` |
-| REJECTED | 422 | `WagerTransactionRejected` |
-| PENDING_REFERENCE | 202 | `WagerTransactionPendingReference` |
+| Resultado               | HTTP | Eventos                                              |
+| ----------------------- | ---- | ---------------------------------------------------- |
+| PROCESSED com movimento | 200  | `WagerTransactionProcessed` + `WalletBalanceChanged` |
+| PROCESSED (LOSS)        | 200  | `WagerTransactionProcessed`                          |
+| REJECTED                | 422  | `WagerTransactionRejected`                           |
+| PENDING_REFERENCE       | 202  | `WagerTransactionPendingReference`                   |
 
 O mesmo caso de uso atende HTTP e SQS (`causationId` = messageId).
