@@ -1,21 +1,28 @@
 import 'reflect-metadata';
 
-import { AppModule } from './app.module';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
 
 const logger = new Logger('Bootstrap');
 
-async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
 
+async function bootstrap(): Promise<void> {
+  const app = await NestFactory.create(
+    AppModule.register({ databaseUrl: requireEnv('DATABASE_URL') }),
+    { bufferLogs: true },
+  );
   app.enableShutdownHooks();
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
-
   logger.log(
-    `HTTP listening on :${port} )`,
+    `HTTP listening on :${port} (roles: ${process.env.APP_ROLES ?? 'none'})`,
   );
 }
 
