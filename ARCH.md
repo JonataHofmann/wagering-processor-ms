@@ -26,6 +26,8 @@ A FK composta é a forma mais direta de dizer “esta coluna precisa ser igual �
 
 
 
+# Documentar erros das triggers
+
 
 
 
