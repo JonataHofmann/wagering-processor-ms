@@ -17,7 +17,7 @@ A correção financeira é garantida pelo **PostgreSQL**, não pelo broker nem p
 |                             | 3. MikroORM e runner de migrations                    | Concluída |
 |                             | 4. Schema, constraints, triggers, permissões e testes | Concluída |
 | Domínio puro                | 5. `Money`                                            | Concluída |
-|                             | 6. `Wallet` e `WalletLedgerEntry`                     | Pendente  |
+|                             | 6. `Wallet` e `WalletLedgerEntry`                     | Concluída |
 |                             | 7. `WagerTransaction`                                 | Pendente  |
 |                             | 8. `InboxMessage` e `OutboxMessage`                   | Pendente  |
 | Persistência e casos de uso | 9 a 12                                                | Pendente  |
@@ -168,17 +168,48 @@ Detalhes na seção 5.
 
 **Consequências.** O ledger fica protegido por duas camadas independentes: permissão (`42501`) e trigger (`WL001`).
 
-#### Portas compartilhadas
 
-| Porta                | Implementação                          | Fake de teste                   |
-| -------------------- | -------------------------------------- | ------------------------------- |
-| `Clock`              | `SystemClock`                          | `FixedClock` (tempo controlado) |
-| `IdGenerator`        | `UuidV7Generator` (`Bun.randomUUIDv7`) | `SequentialIdGenerator`         |
-| `TransactionManager` | etapa 9 (MikroORM)                     | —                               |
+
+
+## 6. Domínio e componentes compartilhados
+
+### 6.1 Erros do domínio
+
+| Tipo | Exemplos | Significado | Tratamento |
+|---|---|---|---|
+| `DomainError` | `INSUFFICIENT_FUNDS`, `CURRENCY_MISMATCH`, `INVALID_AMOUNT` | Situação de negócio prevista | Transação REJECTED com `failureCode`, HTTP 422 |
+| `InvariantViolationError` | Lançamento desbalanceado, movimento de valor zero | Bug | Erro interno e alarme; nunca vira rejeição |
+
+`InvariantViolationError` estende `Error`, não `DomainError`: um tratamento do tipo
+`if (error instanceof DomainError) rejeitar()` nunca transforma um bug em rejeição de negócio.
+
+### 6.2 `Money`
+
+| Método | Comportamento |
+|---|---|
+| `Money.from(props)` | Valida e normaliza; lança `InvalidMoneyError` (`INVALID_AMOUNT` / `INVALID_CURRENCY`) |
+| `Money.zero(currency)` | Zero na moeda |
+| `add`, `subtract` | Exatos; lançam `CurrencyMismatchError` entre moedas diferentes |
+| `negate` | Inverte o sinal; `-0` é normalizado para `0.00` |
+| `isZero`, `isPositive`, `isNegative`, `isLessThan`, `equals` | Consultas |
+| `amount` | String com 2 casas, usada na persistência |
+| `toJSON()` | `MoneyProps` |
+| `toString()` | `"25.00 BRL"`, para logs |
+
+Decisões e interpretações: ADR-004.
+
+### 6.3 Portas compartilhadas
+
+| Porta | Implementação | Fake de teste |
+|---|---|---|
+| `Clock` | `SystemClock` | `FixedClock` (tempo controlado) |
+| `IdGenerator` | `UuidV7Generator` (`Bun.randomUUIDv7`) | `SequentialIdGenerator` |
+| `TransactionManager` | etapa 9 (MikroORM) | — |
 
 Cada porta exporta um token `Symbol` para injeção no Nest, sem importar o Nest.
+O domínio nunca gera ids nem lê o relógio: recebe ambos da camada de aplicação.
 
-#### Hash canônico
+### 6.4 Hash canônico
 
 `payloadHash = SHA-256(JCS(payload))`, em hex minúsculo de 64 caracteres (RFC 8785).
 
@@ -187,20 +218,25 @@ Cada porta exporta um token `Symbol` para injeção no Nest, sem importar o Nest
   a conversão para JSON é explícita, para o hash nunca depender de um `toJSON` implícito.
 - Os campos que entram no hash são definidos pelo caso de uso (etapa 11).
 
-#### UUIDv7
+### 6.5 UUIDv7
 
 Ids ordenáveis pelo tempo: inserções sempre no fim dos índices B-tree,
 sem colisão entre instâncias.
 
-### ADR-007 — Testes com infraestrutura real e banco isolado por suíte
+### 6.6 `Wallet` (aggregate root) e `WalletLedgerEntry`
 
-**Status:** Aceito
+- `debit` e `credit` devolvem o `WalletLedgerEntry` correspondente: não existe caminho
+  que mude o saldo sem produzir o lançamento.
+- `Wallet.open` devolve a wallet (versão 1) e, se o saldo inicial for > 0, o lançamento
+  OPENING (CREDIT v1, 0 → saldo inicial). Adaptação da assinatura do enunciado.
+- O lançamento é criado antes de alterar a wallet: uma operação que falha não deixa rastro.
+- `version` começa em 1 e sobe 1 a cada movimento; operações recusadas não a alteram.
+- `canDebit` permite consultar se um débito cabe no saldo sem lançar exceção.
+- `WalletLedgerEntry` é estruturalmente imutável (sem métodos de mutação, `Object.freeze`).
+  `create` valida aritmética, moedas, valor positivo, saldos não negativos e versão;
+  `rehydrate` não valida, e `isBalanced()` permite detectar inconsistências na leitura.
+- `signedMoney()` devolve o valor com sinal; a soma de todos os lançamentos reconstrói o saldo.
+- `walletVersion` foi acrescentado ao lançamento, espelhando `uq_ledger_wallet_version`.
 
-**Decisão.**
-
-- Testes de integração contra PostgreSQL real (e LocalStack, a partir da etapa 14). Nenhum mock de banco ou fila.
-- Um banco por suíte: o helper migra um template (`wagering_test_template`) uma vez por execução e copia com `CREATE DATABASE ... TEMPLATE` para cada arquivo de teste.
-- Testes de schema conectam como `wagering_app` e comparam SQLSTATEs, não mensagens.
-- Cada teste de constraint viola **uma única regra**, para não depender da ordem interna de verificação do Postgres.
-
-**Alternativas descartadas.** `TRUNCATE` entre testes é impossível (o ledger o bloqueia por design). Transação desfeita por teste não serve para concorrência nem para triggers deferidos.
+A wallet não distingue débito de aposta e de reversão: o caso de uso traduz
+`INSUFFICIENT_FUNDS` para `REVERSAL_INSUFFICIENT_FUNDS` quando o débito vem de um ROLLBACK.
