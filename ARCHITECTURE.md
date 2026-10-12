@@ -167,7 +167,163 @@ Detalhes na seção 5.
 - Sem `ALTER DEFAULT PRIVILEGES`: cada tabela nova recebe GRANT explícito.
 
 **Consequências.** O ledger fica protegido por duas camadas independentes: permissão (`42501`) e trigger (`WL001`).
+### ADR-007 — Estratégia de testes: infraestrutura real, banco isolado e concorrência verificada
 
+**Status:** Aceito (camadas unitária, schema, persistência, HTTP e concorrência em um processo);
+estendido nas etapas 13 a 18 (múltiplas instâncias, falhas e reinício)
+
+**Contexto.**
+O enunciado elimina soluções cujos testes substituem completamente PostgreSQL e SQS por mocks,
+exige testes de concorrência com paralelismo real (não mocks sequenciais) e define como
+invariante final de todos os testes: `wallet.balance == saldo reconstruído pelo ledger`.
+As garantias mais importantes do sistema (unicidade, imutabilidade, não-negatividade,
+serialização por wallet) vivem no banco; só um banco real consegue prová-las.
+
+**Decisão.**
+
+1. **Pirâmide em camadas, cada uma provando o que só ela pode provar.**
+
+| Camada | Pasta | Infraestrutura | Prova |
+|---|---|---|---|
+| Unitária | `test/unit` | Nenhuma | Regras do domínio: `Money`, `Wallet`, `WagerTransaction`, política de referência, backoff, hash canônico, eventos |
+| Schema | `test/integration/schema` | PostgreSQL | O banco sozinho recusa estados inválidos: constraints, triggers, permissões, migrations reversíveis |
+| Persistência | `test/integration/persistence` | PostgreSQL | Ida e volta domínio ↔ banco, transação, lock, atomicidade entre repositórios |
+| HTTP | `test/integration/http` | PostgreSQL + aplicação Nest real | Contrato da API, status HTTP, idempotência, regras de negócio de ponta a ponta |
+| Concorrência | `test/concurrency` | PostgreSQL + aplicação Nest real | Corridas reais: serialização por wallet, idempotência sob disputa, lock timeout |
+
+2. **Infraestrutura real, nunca simulada.**
+   - Testes de integração e concorrência rodam contra o PostgreSQL do Docker Compose
+     (e contra o LocalStack a partir da etapa 14).
+   - Os testes HTTP sobem a aplicação Nest completa (`AppModule.register`) numa porta livre
+     (`listen(0)`) e falam com ela por `fetch`: filtro de erros, controller, caso de uso,
+     repositórios, MikroORM, PostgreSQL e triggers, sem nada substituído.
+   - O domínio é testado sem infraestrutura porque é puro (ADR-002), não porque algo foi mockado.
+
+3. **Um banco isolado por suíte, copiado de um template.**
+   - `test/support/database.ts` migra `wagering_test_template` uma única vez por execução de
+     `bun test` e cria cada banco de suíte com `CREATE DATABASE wg_test_<uuid> TEMPLATE ...`
+     (milissegundos, com tabelas, triggers, domains e permissões).
+   - Cada banco é apagado no `afterAll` (`DROP DATABASE ... WITH (FORCE)`).
+   - Os testes nunca tocam o banco `wagering` de desenvolvimento.
+
+4. **Testes conectam como a aplicação.**
+   - O MikroORM dos testes usa `wagering_app` (`TEST_DATABASE_APP_URL`), com exatamente as
+     permissões de produção. O owner só é usado onde o teste precisa provar que até ele é
+     barrado pelos triggers.
+
+5. **Asserções por código, não por texto.**
+   - Erros do banco são comparados pelo SQLSTATE (`23505`, `23514`, `23503`, `42501`,
+     `WL001`–`WL004`) via `sqlState()`, nunca pela mensagem, que muda com versão e idioma.
+   - Erros da API são comparados por status HTTP e `error.code`.
+
+6. **Cada teste de constraint viola uma única regra.**
+   O PostgreSQL verifica em ordem fixa (CHECK → UNIQUE → FOREIGN KEY → triggers deferidos
+   no COMMIT) e para na primeira falha. Um dado que viola duas regras faz o teste depender
+   dessa ordem e não provar o que diz provar.
+
+7. **Concorrência com paralelismo real e repetição.**
+   - Requisições HTTP simultâneas (`Promise.all`), cada uma com sua conexão do pool e sua
+     transação no PostgreSQL.
+   - Cada corrida é repetida `CONCURRENCY_ITERATIONS` vezes (padrão 10; verificado com 50),
+     porque uma corrida que passa uma vez pode ter tido sorte.
+   - Asserções sobre o banco (contagem de lançamentos por direção), não só sobre as respostas:
+     um débito duplicado aparece no ledger mesmo que a resposta pareça certa.
+   - Locks segurados por fora da aplicação (`connectPersistence` sobre o mesmo banco) para
+     provar comportamento sob espera: lock por wallet e `lock_timeout`.
+
+8. **Invariante final em todas as suítes que movimentam saldo.**
+   `walletsInconsistentWithLedger()` (`test/support/invariants.ts`) compara, numa única query,
+   o saldo de cada wallet com a soma assinada do seu ledger. O `afterAll` exige lista vazia.
+
+9. **Determinismo.**
+   - `Clock` e `IdGenerator` injetáveis; nos testes de domínio e persistência, `FixedClock`
+     e `SequentialIdGenerator` tornam datas e ids previsíveis.
+   - O backoff aceita `jitter: 'none'` ou uma fonte aleatória injetada.
+   - Cada teste cria os próprios dados (wallets e jogadores com UUID novo), sem depender
+     da ordem de execução.
+
+10. **Todo teste importante passa por um "experimento de sabotagem".**
+    Ao escrever um teste de garantia, a regra correspondente é desligada de propósito
+    (trigger comentado, lock removido, `.sort()` retirado do hash, re-checagem de
+    idempotência comentada) para confirmar que o teste falha. Um teste que nunca falha
+    não prova nada.
+
+**Helpers de teste.**
+
+| Helper | Papel |
+|---|---|
+| `test/support/database.ts` | Template, banco isolado por suíte, `runMigrations` |
+| `test/support/pg.ts` | `inTx`, `sqlState`, `queryOnce` |
+| `test/support/schema-fixtures.ts` | Dados válidos direto no banco para os testes de schema |
+| `test/support/persistence.ts` | `createPersistence` (banco próprio) e `connectPersistence` (banco compartilhado com a aplicação) |
+| `test/support/http-app.ts` | Sobe a aplicação real contra um banco isolado |
+| `test/support/wagering-client.ts` | Cliente da API reutilizado por HTTP e concorrência |
+| `test/support/invariants.ts` | Invariante saldo = ledger para todas as wallets |
+| `test/support/fakes.ts` | `FixedClock`, `SequentialIdGenerator` |
+| `scripts/checks/sql/*.sql` | Roteiros manuais de verificação do schema (depuração e apresentação) |
+
+**Matriz de concorrência (etapa 12).**
+
+| Cenário | O que prova |
+|---|---|
+| 100.00 com duas apostas de 80.00 | Uma PROCESSED, uma REJECTED, saldo 20.00, um débito |
+| 30 apostas de 10.00 sobre 100.00 | 10 aceitas e saldos observados únicos: decisões serializadas |
+| BET, WIN e LOSS simultâneos | Saldo final = soma exata das operações aceitas |
+| A mesma aposta 50 vezes | Um débito, 49 replays, um único `transactionId` |
+| A mesma key em wallets diferentes | A `UNIQUE` decide; as perdedoras recebem 409 |
+| REFUNDs simultâneos da mesma BET | Só um devolve; os demais `REFERENCE_ALREADY_REVERSED` |
+| Criação simultânea da mesma wallet | Uma 201, as demais 409 |
+| 20 wallets em paralelo | Cada uma fecha certo, independentemente |
+| Wallet A travada, aposta em B | B responde na hora: o lock é por wallet, nunca global |
+| Espera além do `lock_timeout` | 503 + `Retry-After`, nada gravado, o reenvio processa |
+
+**Cobertura dos testes obrigatórios do enunciado.**
+
+| Exigido | Situação |
+|---|---|
+| Operações e validações de `Money` (escala, arredondamento, entradas inválidas) | Coberto (unitário) |
+| Invariantes da `Wallet` | Coberto (unitário) |
+| Regras de BET, WIN, LOSS, REFUND, ROLLBACK | Coberto (unitário e HTTP) |
+| Conflito de moeda | Coberto (unitário e HTTP) |
+| Idempotency key com payload divergente | Coberto (unitário e HTTP) |
+| Migrations e constraints | Coberto (schema) |
+| Atomicidade entre wallet, ledger, inbox e outbox | Coberto (persistência e HTTP) |
+| A mesma aposta 50 vezes em paralelo | Coberto (concorrência) |
+| Disputa pelo saldo da mesma wallet | Coberto (concorrência) |
+| Wallets distintas em paralelo | Coberto (concorrência) |
+| ≥ 3 processos ou instâncias | Etapa 13 |
+| Inbox, redelivery, retry e DLQ | Etapa 14 |
+| Worker morto depois do commit e antes do ack | Etapa 14 |
+| Publishers concorrentes sobre a mesma outbox | Etapa 15 |
+| ROLLBACK ou REFUND antes da referência (processamento posterior) | Etapa 16 |
+| Reinício do serviço com consistência final | Etapa 18 |
+
+**Comandos.**
+
+| Comando | Roda |
+|---|---|
+| `bun run test:unit` | Domínio, sem infraestrutura |
+| `bun run test:integration` | Schema, persistência e HTTP |
+| `bun run test:concurrency` | Corridas em um processo |
+| `CONCURRENCY_ITERATIONS=50 bun test --timeout 300000 test/concurrency` | Corridas com mais repetições |
+| `MIKRO_ORM_DEBUG=true bun run test:concurrency` | Idem, mostrando as queries |
+
+**Alternativas descartadas.**
+- **Mocks de banco ou de repositório nos testes de integração:** proibido pelo enunciado e
+  incapaz de provar constraints, triggers, locks e atomicidade.
+- **`TRUNCATE` entre testes:** impossível por design, porque o ledger bloqueia TRUNCATE.
+- **Uma transação desfeita por teste:** não serve para concorrência (várias conexões) nem
+  para triggers deferidos (só disparam no COMMIT).
+- **Testcontainers por suíte:** isolamento máximo, mas boot lento por suíte e suporte
+  incerto no Bun. O template no mesmo PostgreSQL dá isolamento equivalente em milissegundos.
+
+**Consequências.**
+- A suíte de integração e concorrência exige Docker em execução e leva segundos, não
+  milissegundos.
+- Em troca, cada garantia avaliada pelo enunciado tem um teste que falharia se ela quebrasse,
+  executado contra a mesma infraestrutura que a produção usaria.
+- Um banco esquecido por um teste interrompido (`Ctrl+C`) pode sobrar; a limpeza manual está
+  documentada no README.
 ### ADR-009 — Camada de aplicação e contrato HTTP de erros
 
 **Status:** Aceito (wallets); estendido na etapa 11 (transações)
