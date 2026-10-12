@@ -1,4 +1,4 @@
-import config from '@/infrastructure/persistence/mikro-orm.config';
+import config from '@/src/infrastructure/persistence/mikro-orm.config';
 import { MikroORM } from '@mikro-orm/postgresql';
 import { Client } from 'pg';
 

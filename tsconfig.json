@@ -24,7 +24,7 @@
     "resolveJsonModule": true,
     "rootDir": "./",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./*"]
     }
   },
   "include": ["src", "test", "scripts"]
