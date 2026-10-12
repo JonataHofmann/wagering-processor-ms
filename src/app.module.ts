@@ -19,8 +19,8 @@ export class AppModule {
         PersistenceModule.forRoot({ databaseUrl: options.databaseUrl }),
         WalletModule,
         WageringModule,
-        HealthController,
       ],
+      controllers: [HealthController],
       providers: [{ provide: APP_FILTER, useClass: ErrorMappingFilter }],
     };
   }
