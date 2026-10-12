@@ -26,6 +26,7 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   // conflito
   WALLET_ALREADY_EXISTS: 409,
   IDEMPOTENCY_KEY_REUSED: 409,
+  DUPLICATE_TRANSACTION: 409,
 };
 
 const UNPROCESSABLE = 422;

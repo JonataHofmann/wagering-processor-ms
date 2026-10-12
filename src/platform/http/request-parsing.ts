@@ -71,6 +71,21 @@ export class RequestParser {
     return value?.toLowerCase();
   }
 
+  /** String que precisa ser um dos valores permitidos. */
+  oneOf<T extends string>(field: string, allowed: readonly T[]): T | undefined {
+    const value = this.string(field);
+    if (
+      value !== undefined &&
+      !(allowed as readonly string[]).includes(value)
+    ) {
+      this.violations.push({
+        field,
+        message: `must be one of ${allowed.join(', ')}`,
+      });
+      return undefined;
+    }
+    return value as T | undefined;
+  }
   /** Inteiro opcional vindo de query string. */
   integer(
     field: string,
