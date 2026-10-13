@@ -469,15 +469,17 @@ silêncio; a DLQ a preserva para investigação.
 - Resiliência (processos reais): SIGKILL entre o commit e o ack (ponto de injeção de falha
   determinístico via `FAULT_INJECTION`), SIGTERM com mensagem em andamento, esgotamento de
   tentativas.
+
 ### ADR-014 — Transactional outbox com relay por lease
 
 **Status:** Aceito
 
 **Decisão.**
+
 - O caso de uso grava os eventos na outbox na MESMA transação do efeito financeiro;
   nada é publicado antes do commit, porque quem publica é o relay, lendo o que já foi confirmado.
 - Cada rodada do relay: (1) reserva um lote com `UPDATE ... WHERE id IN (SELECT ... FOR UPDATE
-  SKIP LOCKED) RETURNING`, gravando um lease (`locked_until`, `locked_by`); (2) publica fora de
+SKIP LOCKED) RETURNING`, gravando um lease (`locked_until`, `locked_by`); (2) publica fora de
   transação; (3) marca os publicados e agenda os que falharam, em transação curta.
 - Publicação no `wallet-events.fifo` com `SendMessageBatch`: `MessageGroupId` = aggregateId
   (ordem por wallet), `MessageDeduplicationId` = eventId, corpo = envelope gravado.
@@ -495,12 +497,14 @@ O SQS FIFO descarta a cópia dentro de 5 minutos (otimização); a garantia é o
 deduplicar pelo eventId.
 
 **Limitações.**
+
 - Relays diferentes podem publicar eventos da mesma wallet fora de ordem; os eventos carregam
   `walletVersion` para o consumidor ordenar e descartar obsoletos.
 - O lease usa o relógio de cada instância; uma diferença de relógio maior que o lease (30 s)
   poderia gerar publicação duplicada, já tolerada.
 
 **Verificação.**
+
 - Lógica (banco real, publicador em memória): ordem, 4 relays e 200 eventos sem duplicata,
   lease, relay morto antes e depois de publicar, falha parcial, broker fora do ar.
 - Ponta a ponta (fila real): uma aposta vira eventos no `wallet-events.fifo`; corpo idêntico
@@ -508,6 +512,48 @@ deduplicar pelo eventId.
 - Resiliência (processos reais): o cenário do enunciado (commit confirmado, relay morto antes
   de publicar, outra instância assume e publica), relay morto depois de publicar
   (republicação segura) e 3 relays em processos separados sem perda.
+
+### ADR-015 — Referências fora de ordem: espera com backoff, atalho e scheduler
+
+**Status:** Aceito
+
+**Decisão.**
+
+- Uma transação cuja referência não existe (ou existe, mas ainda não é terminal) fica
+  `PENDING_REFERENCE`: nada é movimentado, o evento `WagerTransactionPendingReference` é
+  emitido, e o HTTP responde 202.
+- Novas tentativas com backoff exponencial (1 s, 2 s, 4 s... até 60 s, equal jitter) até o
+  TTL de 15 minutos; depois disso, `REJECTED` com `REFERENCE_NOT_FOUND` e
+  `WagerTransactionRejected`. Tudo configurável por variável de ambiente.
+- Atalho: quando uma transação chega a um estado final, as pendências que esperam por ela
+  são antecipadas para "agora", na mesma transação SQL. Vale em cadeia (um REFUND resolvido
+  antecipa o ROLLBACK que esperava por ele).
+- A resolução usa a mesma decisão da primeira tentativa (`WagerSettlement`): lock da wallet,
+  releitura sob o lock (em transação separada da primeira leitura, para não ler o identity
+  map), política de referência, saldo, movimento e eventos, na mesma transação SQL.
+- Scheduler ativado pelo papel `scheduler`: reserva lotes de pendências vencidas com
+  `FOR UPDATE SKIP LOCKED`, usando o `next_attempt_at` como lease (10 s), e as resolve em
+  paralelo. Pendências da mesma wallet ficam serializadas pelo lock da wallet.
+
+**Por que esperar uma referência pendente, em vez de rejeitar.** Um ROLLBACK de um REFUND
+que ainda espera a BET não tem nada de errado: ele só chegou cedo demais. Rejeitar puniria
+o provedor por uma ordem de entrega que ele não controla. Uma referência REJECTED, por outro
+lado, nunca vai mudar, e continua levando a `REFERENCE_NOT_PROCESSED`.
+
+**Reagendamento não gera evento.** Só a entrada em espera e o desfecho final são fatos de
+negócio. O replay da requisição original mostra o estado atual: 202 enquanto pendente, o
+desfecho depois.
+
+**Verificação.**
+
+- Caso de uso (aplicação real, tempos curtos): reagendamento, atalho, resolução, política
+  na resolução, expiração, cadeia, resoluções simultâneas (encontrou o bug do identity map,
+  barrado pelo trigger `fn_wtx_guard`), reservas concorrentes.
+- Ponta a ponta: REFUND antes da BET pela API e ROLLBACK antes do WIN pela fila, resolvidos
+  sem chamada manual; expiração automática; instância sem o papel não resolve.
+- Resiliência (processos reais): scheduler morto depois de reservar; 3 schedulers e 30
+  pendências, cada uma resolvida exatamente uma vez.
+
 ## 6. Domínio e componentes compartilhados
 
 ### 6.1 Erros do domínio
