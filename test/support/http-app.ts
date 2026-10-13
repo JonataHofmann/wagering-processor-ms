@@ -1,7 +1,7 @@
-import { AppModule } from '@/src/app.module';
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import 'reflect-metadata';
+import { AppModule, type AppOptions } from '../../src/app.module';
 import { createIsolatedDatabase, type IsolatedDatabase } from './database';
 
 export interface TestApp {
@@ -21,11 +21,18 @@ export interface TestApp {
 }
 
 /** Sobe a aplicação Nest real numa porta livre, contra um banco isolado, como wagering_app. */
-export async function startTestApp(): Promise<TestApp> {
+
+export async function startTestApp(
+  options: Omit<AppOptions, 'databaseUrl'> = {},
+): Promise<TestApp> {
   const db = await createIsolatedDatabase();
   const app = await NestFactory.create(
-    AppModule.register({ databaseUrl: db.appUrl }),
-    { logger: false },
+    AppModule.register({
+      databaseUrl: db.appUrl,
+      debug: process.env.MIKRO_ORM_DEBUG === 'true',
+      ...options,
+    }),
+    { logger: process.env.APP_LOGS === 'true' ? undefined : false },
   );
   await app.listen(0);
   const { port } = app.getHttpServer().address() as { port: number };

@@ -71,6 +71,7 @@ async function waitUntilLive(
  */
 export async function startAppProcess(
   databaseUrl: string,
+  extraEnv: Record<string, string> = {},
 ): Promise<AppProcess> {
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -78,11 +79,14 @@ export async function startAppProcess(
 
   // process.execPath: o mesmo binário do Bun que roda os testes (não depende do PATH)
   const child = Bun.spawn([process.execPath, 'src/main.ts'], {
+    // APP_ROLES=api por padrão: o .env pode ligar o consumer, e o teste não deve consumir a fila de desenvolvimento
     env: {
       ...process.env,
+      APP_ROLES: 'api',
+      MIKRO_ORM_DEBUG: 'false',
+      ...extraEnv,
       DATABASE_URL: databaseUrl,
       PORT: String(port),
-      MIKRO_ORM_DEBUG: 'false',
     },
     stdout: 'pipe',
     stderr: 'pipe',
