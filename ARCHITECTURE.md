@@ -554,6 +554,37 @@ desfecho depois.
 - Resiliência (processos reais): scheduler morto depois de reservar; 3 schedulers e 30
   pendências, cada uma resolvida exatamente uma vez.
 
+### ADR-016 — Reconciliação somente leitura
+
+**Status:** Aceito
+
+**Decisão.**
+
+- `POST /wallets/:id/reconciliation` (uma wallet) e `bun run reconcile` (todas, em páginas
+  por keyset) comparam o saldo gravado com o saldo reconstruído pelo ledger.
+- Cinco verificações: `BALANCE_MISMATCH` (a exigência do enunciado), `LAST_ENTRY_MISMATCH`,
+  `VERSION_MISMATCH`, `LEDGER_CHAIN_BROKEN`, `LEDGER_VERSION_GAP`.
+- Cada consulta é um único comando SQL (CTEs + funções de janela): um único snapshot no
+  READ COMMITTED, sem falsas divergências sob carga concorrente.
+- Valores normalizados com `round(x, 2)::text`: o domínio `money_amount` aceita até 2 casas,
+  e um valor gravado à mão como `81` não pode divergir de `81.00` só pela formatação.
+- Somente leitura por construção: nem o caso de uso nem a porta do repositório têm escrita.
+- Toda verificação vira métrica (`wallet_reconciliation_checks_total`); toda divergência vira
+  log de erro estruturado (`WALLET_LEDGER_DIVERGENCE`) e incrementa
+  `wallet_reconciliation_divergences_total{code}`.
+- Divergência responde 200 com `consistent: false` (achado, não erro da requisição).
+  O comando sai com código 1, para cron e alertas.
+
+**Por que nunca corrigir automaticamente.** Uma divergência significa que algo contornou
+domínio, versão, triggers e permissões. Corrigir o saldo apagaria a evidência da causa e
+poderia mascarar uma fraude. A correção, quando necessária, é uma decisão humana, feita com
+um lançamento de ajuste auditável, nunca com um UPDATE no saldo.
+
+**Verificação.** Corrupções reais feitas pelo owner com os triggers desligados (saldo
+alterado, lançamento apagado do meio, versão adiantada), varredura em páginas pequenas,
+reconciliação contínua durante 60 apostas concorrentes sem falsa divergência, e o comando
+executado como processo, com os exit codes.
+
 ## 6. Domínio e componentes compartilhados
 
 ### 6.1 Erros do domínio
