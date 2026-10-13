@@ -281,26 +281,26 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
 
 **Cobertura dos testes obrigatórios do enunciado.**
 
-| Exigido                                                                        | Situação                                       |
-| ------------------------------------------------------------------------------ | ---------------------------------------------- |
-| Operações e validações de `Money` (escala, arredondamento, entradas inválidas) | Coberto (unitário)                             |
-| Invariantes da `Wallet`                                                        | Coberto (unitário)                             |
-| Regras de BET, WIN, LOSS, REFUND, ROLLBACK                                     | Coberto (unitário e HTTP)                      |
-| Conflito de moeda                                                              | Coberto (unitário e HTTP)                      |
-| Idempotency key com payload divergente                                         | Coberto (unitário e HTTP)                      |
-| Migrations e constraints                                                       | Coberto (schema)                               |
-| Atomicidade entre wallet, ledger, inbox e outbox                               | Coberto (persistência e HTTP)                  |
-| A mesma aposta 50 vezes em paralelo                                            | Coberto (concorrência)                         |
-| Disputa pelo saldo da mesma wallet                                             | Coberto (concorrência)                         |
-| Wallets distintas em paralelo                                                  | Coberto (concorrência)                         |
-| ≥ 3 processos ou instâncias                                                    | Etapa 13                                       |
-| Inbox, redelivery, retry e DLQ                                                 | Etapa 14                                       |
-| Worker morto depois do commit e antes do ack                                   | Etapa 14                                       |
-| Publishers concorrentes sobre a mesma outbox                                   | Etapa 15                                       |
-| ROLLBACK ou REFUND antes da referência (processamento posterior)               | Etapa 16                                       |
-| Reinício do serviço com consistência final                                     | Etapa 18                                       |
-| Inbox, redelivery, retry e DLQ                                                 | Coberto (handler, ponta a ponta e resiliência) |
-| Worker morto depois do commit e antes do ack                                   | Coberto (resiliência, SIGKILL real)            |
+| Exigido                                                                        | Situação                                                              |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| Operações e validações de `Money` (escala, arredondamento, entradas inválidas) | Coberto (unitário)                                                    |
+| Invariantes da `Wallet`                                                        | Coberto (unitário)                                                    |
+| Regras de BET, WIN, LOSS, REFUND, ROLLBACK                                     | Coberto (unitário e HTTP)                                             |
+| Conflito de moeda                                                              | Coberto (unitário e HTTP)                                             |
+| Idempotency key com payload divergente                                         | Coberto (unitário e HTTP)                                             |
+| Migrations e constraints                                                       | Coberto (schema)                                                      |
+| Atomicidade entre wallet, ledger, inbox e outbox                               | Coberto (persistência e HTTP)                                         |
+| A mesma aposta 50 vezes em paralelo                                            | Coberto (concorrência)                                                |
+| Disputa pelo saldo da mesma wallet                                             | Coberto (concorrência)                                                |
+| Wallets distintas em paralelo                                                  | Coberto (concorrência)                                                |
+| ≥ 3 processos ou instâncias                                                    | Etapa 13                                                              |
+| Inbox, redelivery, retry e DLQ                                                 | Etapa 14                                                              |
+| Worker morto depois do commit e antes do ack                                   | Etapa 14                                                              |
+| Publishers concorrentes sobre a mesma outbox                                   | Etapa 15                                                              |
+| ROLLBACK ou REFUND antes da referência (processamento posterior)               | Etapa 16                                                              |
+| Reinício do serviço com consistência final                                     | Coberto (resiliência: carga mista, SIGKILL, SIGTERM e reinício total) |
+| Inbox, redelivery, retry e DLQ                                                 | Coberto (handler, ponta a ponta e resiliência)                        |
+| Worker morto depois do commit e antes do ack                                   | Coberto (resiliência, SIGKILL real)                                   |
 | **Comandos.**                                                                  |
 
 | Comando                                                                | Roda                         |
@@ -329,6 +329,18 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
   executado contra a mesma infraestrutura que a produção usaria.
 - Um banco esquecido por um teste interrompido (`Ctrl+C`) pode sobrar; a limpeza manual está
   documentada no README.
+
+**Teste de reinício (`restart-consistency.test.ts`).** Três instâncias com todos os papéis
+recebem carga mista de 12 wallets (HTTP e fila, referências fora de ordem nos dois canais,
+mensagens entregues em duplicata) enquanto uma instância morre com SIGKILL, outra recebe
+SIGTERM e, por fim, todas morrem com SIGKILL e o serviço é reiniciado. O cliente HTTP reenvia
+a mesma requisição a outra instância em caso de falha, como um provedor real.
+
+O plano de operações não admite rejeições, então o saldo final de cada wallet é conhecido de
+antemão (959.00, versão 14). Depois da convergência (sem intervenção), o teste prova:
+saldo final exato em todas as wallets; uma transação por operação, todas PROCESSED; um
+lançamento por movimento e saldo = ledger; cada mensagem uma única vez na inbox, DLQ e fila
+vazias; toda a outbox publicada e presente no broker; e `bun run reconcile` com exit 0.
 
 ### ADR-009 — Camada de aplicação e contrato HTTP de erros
 

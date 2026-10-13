@@ -44,7 +44,7 @@ As decisões de arquitetura, alternativas e trade-offs estão em [ARCHITECTURE.m
 | Referências fora de ordem (`PENDING_REFERENCE`, backoff, TTL, scheduler) | ✓                                                                     |
 | Reconciliação saldo × ledger (endpoint e comando)                        | ✓                                                                     |
 | Testes de resiliência com processos reais (SIGKILL, SIGTERM)             | ✓                                                                     |
-| Teste de reinício sob carga com prova de consistência final              | Em andamento                                                          |
+| Teste de reinício sob carga com prova de consistência final              | ✓                                                                     |
 | Observabilidade: logs JSON, `/metrics` (Prometheus), `/health/ready`     | Em andamento (métricas já contadas em memória; `/health/live` pronto) |
 | Autenticação de provedores                                               | Pendente                                                              |
 
@@ -570,16 +570,16 @@ bun run infra:up           # obrigatório antes dos testes de integração
 
 ### O que as suítes provam
 
-| Suíte         | Destaques                                                                                                                                                                         |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Schema        | O banco sozinho recusa saldo negativo, ledger alterado (até pelo owner), saldo sem lançamento, reversão dupla, terceira casa decimal; migrations reversíveis                      |
-| HTTP          | Cada tipo de transação, replay com o saldo da época, conflito 409, referência fora de ordem                                                                                       |
-| Concorrência  | A mesma aposta 50 vezes gera um débito; 100.00 com duas apostas de 80.00 termina em uma PROCESSED e uma REJECTED; o lock é por wallet, nunca global; tudo repetido em 3 processos |
-| Consumer      | Inbox na mesma transação do efeito; reentrega sem efeito duplicado; DLQ imediata para mensagens inválidas; retry com recuperação                                                  |
-| Relay         | 4 relays e 200 eventos sem perda nem duplicata; relay morto antes e depois de publicar                                                                                            |
-| Pendências    | REFUND antes da BET e ROLLBACK antes do WIN resolvidos sozinhos; expiração; cadeias; 3 schedulers                                                                                 |
-| Reconciliação | Corrupções reais detectadas, registradas e **não** corrigidas; sem falsa divergência sob carga                                                                                    |
-| Resiliência   | SIGKILL entre o commit e o ack; SIGTERM com mensagem em andamento; esgotamento de tentativas; relay e scheduler mortos com outra instância assumindo                              |
+| Suíte         | Destaques                                                                                                                                                                                                                                      |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Schema        | O banco sozinho recusa saldo negativo, ledger alterado (até pelo owner), saldo sem lançamento, reversão dupla, terceira casa decimal; migrations reversíveis                                                                                   |
+| HTTP          | Cada tipo de transação, replay com o saldo da época, conflito 409, referência fora de ordem                                                                                                                                                    |
+| Concorrência  | A mesma aposta 50 vezes gera um débito; 100.00 com duas apostas de 80.00 termina em uma PROCESSED e uma REJECTED; o lock é por wallet, nunca global; tudo repetido em 3 processos                                                              |
+| Consumer      | Inbox na mesma transação do efeito; reentrega sem efeito duplicado; DLQ imediata para mensagens inválidas; retry com recuperação                                                                                                               |
+| Relay         | 4 relays e 200 eventos sem perda nem duplicata; relay morto antes e depois de publicar                                                                                                                                                         |
+| Pendências    | REFUND antes da BET e ROLLBACK antes do WIN resolvidos sozinhos; expiração; cadeias; 3 schedulers                                                                                                                                              |
+| Reconciliação | Corrupções reais detectadas, registradas e **não** corrigidas; sem falsa divergência sob carga                                                                                                                                                 |
+| Resiliência   | SIGKILL entre o commit e o ack; SIGTERM com mensagem em andamento; esgotamento de tentativas; relay e scheduler mortos com outra instância assumindo; **reinício total do serviço sob carga mista, com saldo final exato em todas as wallets** |
 
 Todas as suítes que movimentam saldo terminam verificando a invariante final em todas as wallets: `wallet.balance` = soma do ledger.
 
