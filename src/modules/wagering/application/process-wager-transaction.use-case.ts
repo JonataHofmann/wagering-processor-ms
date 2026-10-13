@@ -31,8 +31,31 @@ import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transactio
 import { WagerTransactionKind } from '@/src/modules/wagering/domain/wager-transaction-kind';
 import { WagerTransactionStatus } from '@/src/modules/wagering/domain/wager-transaction-status';
 import { DuplicateWagerTransactionError } from '@/src/modules/wagering/error/wager-transaction.errors';
-import { IdempotencyKeyReusedError } from '@/src/modules/wagering/error/wagering.errors';
 import { WalletLedgerEntry } from '@/src/modules/wallet/domain/wallet-ledger-entry';
+
+import type { InboxRepository } from '@/src/modules/messaging/application/ports/inbox.repository';
+import { InboxMessage } from '@/src/modules/messaging/domain/inbox-message';
+import {
+  DuplicateMessageError,
+  IdempotencyKeyReusedError,
+} from '@/src/modules/wagering/error/wagering.errors';
+
+export interface InboxReceipt {
+  consumerName: string;
+  messageId: string;
+  payloadHash: string;
+}
+
+export interface ProcessWagerTransactionDependencies {
+  transactionManager: TransactionManager;
+  inbox: InboxRepository;
+  wallets: WalletRepository;
+  ledger: LedgerRepository;
+  transactions: WagerTransactionRepository;
+  outbox: OutboxRepository;
+  ids: IdGenerator;
+  clock: Clock;
+}
 
 export interface ProcessWagerTransactionCommand {
   idempotencyKey: string;
@@ -73,32 +96,56 @@ export class ProcessWagerTransactionUseCase {
 
   async execute(
     command: ProcessWagerTransactionCommand,
+    receipt?: InboxReceipt,
   ): Promise<TransactionResult> {
     const { transactionManager: tm, transactions } = this.deps;
 
     const money = Money.from(command.money); // INVALID_AMOUNT / INVALID_CURRENCY → 400
     const payloadHash = computePayloadHash({ ...command, money });
 
-    // 2. fast path: replays não pegam lock nenhum
-    const existing = await tm.runInTransaction(() =>
-      transactions.findByIdempotencyKey(command.idempotencyKey),
-    );
-    if (existing !== undefined) return this.replay(existing, payloadHash);
+    // 2. fast path: replays não pegam lock nenhum.
+    //    Com inbox, o fast path é pulado: o replay também precisa registrar a mensagem,
+    //    e isso acontece dentro da transação principal (passo 3).
+    if (receipt === undefined) {
+      const existing = await tm.runInTransaction(() =>
+        transactions.findByIdempotencyKey(command.idempotencyKey),
+      );
+      if (existing !== undefined) return this.replay(existing, payloadHash);
+    }
 
     try {
-      return await tm.runInTransaction(() =>
-        this.processUnderLock(command, money, payloadHash),
-      );
+      return await tm.runInTransaction(async () => {
+        await this.recordInbox(receipt); // DuplicateMessageError se for reentrega
+        return this.processUnderLock(command, money, payloadHash);
+      });
     } catch (error) {
       // 4. mesma key gravada por outra transação concorrente (ex.: outra wallet, logo outro lock)
       if (error instanceof DuplicateWagerTransactionError) {
-        const winner = await tm.runInTransaction(() =>
-          transactions.findByIdempotencyKey(command.idempotencyKey),
-        );
-        if (winner !== undefined) return this.replay(winner, payloadHash);
+        return tm.runInTransaction(async () => {
+          await this.recordInbox(receipt);
+          const winner = await transactions.findByIdempotencyKey(
+            command.idempotencyKey,
+          );
+          if (winner === undefined) throw error;
+          return this.replay(winner, payloadHash);
+        });
       }
       throw error;
     }
+  }
+
+  /** Registra a mensagem na inbox, na transação atual. Reentrega → DuplicateMessageError. */
+  private async recordInbox(receipt: InboxReceipt | undefined): Promise<void> {
+    if (receipt === undefined) return;
+    const message = InboxMessage.receive({
+      ...receipt,
+      receivedAt: this.deps.clock.now(),
+    });
+    if (!(await this.deps.inbox.tryRegister(message))) {
+      throw new DuplicateMessageError(receipt.consumerName, receipt.messageId);
+    }
+    message.markProcessed(this.deps.clock.now());
+    await this.deps.inbox.markProcessed(message);
   }
 
   private replay(

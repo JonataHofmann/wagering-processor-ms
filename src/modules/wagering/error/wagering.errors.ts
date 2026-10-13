@@ -1,4 +1,4 @@
-import { DomainError } from "@/src/shared/error/domain-error";
+import { DomainError } from '@/src/shared/error/domain-error';
 
 /** Mesma Idempotency-Key com conteúdo diferente: conflito, nunca replay. HTTP 409. */
 export class IdempotencyKeyReusedError extends DomainError {
@@ -8,5 +8,15 @@ export class IdempotencyKeyReusedError extends DomainError {
     super(
       `idempotency key ${idempotencyKey} was already used with a different payload`,
     );
+  }
+}
+
+export class DuplicateMessageError extends Error {
+  constructor(
+    public readonly consumerName: string,
+    public readonly messageId: string,
+  ) {
+    super(`message ${consumerName}/${messageId} already processed`);
+    this.name = 'DuplicateMessageError';
   }
 }

@@ -28,6 +28,10 @@ import {
   type TransactionManager,
 } from '@/src/shared/application/ports/transaction-manager.port';
 import { Module } from '@nestjs/common';
+import {
+  INBOX_REPOSITORY,
+  type InboxRepository,
+} from '../messaging/application/ports/inbox.repository';
 
 @Module({
   controllers: [WageringController],
@@ -36,6 +40,7 @@ import { Module } from '@nestjs/common';
       provide: ProcessWagerTransactionUseCase,
       useFactory: (
         transactionManager: TransactionManager,
+        inbox: InboxRepository,
         wallets: WalletRepository,
         ledger: LedgerRepository,
         transactions: WagerTransactionRepository,
@@ -45,6 +50,7 @@ import { Module } from '@nestjs/common';
       ) =>
         new ProcessWagerTransactionUseCase({
           transactionManager,
+          inbox,
           wallets,
           ledger,
           transactions,
@@ -54,6 +60,7 @@ import { Module } from '@nestjs/common';
         }),
       inject: [
         TRANSACTION_MANAGER,
+        INBOX_REPOSITORY,
         WALLET_REPOSITORY,
         LEDGER_REPOSITORY,
         WAGER_TRANSACTION_REPOSITORY,
