@@ -14,6 +14,11 @@ import {
   referenceLookupConfigFromEnv,
   ReferenceLookupPolicy,
 } from './modules/wagering/application/reference-lookup.policy';
+import {
+  SCHEDULER_CONFIG,
+  type SchedulerConfig,
+  schedulerConfigFromEnv,
+} from './modules/wagering/infrastructure/scheduler/scheduler.config';
 import { WageringModule } from './modules/wagering/wagering.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { HealthController } from './platform/health/health.controller';
@@ -29,6 +34,7 @@ export interface AppOptions {
   /** configuração do relay da outbox; padrão: lote 10, lease 30 s, intervalo 500 ms */
   relay?: RelayConfig;
   referenceLookup?: ReferenceLookupConfig;
+  scheduler?: SchedulerConfig;
 }
 
 @Global()
@@ -37,6 +43,7 @@ class AppConfigModule {
   static forRoot(
     roles: ReadonlySet<AppRole>,
     referenceLookup: ReferenceLookupConfig,
+    scheduler: SchedulerConfig,
   ): DynamicModule {
     return {
       module: AppConfigModule,
@@ -46,8 +53,9 @@ class AppConfigModule {
           provide: REFERENCE_LOOKUP_POLICY,
           useValue: new ReferenceLookupPolicy(referenceLookup),
         },
+        { provide: SCHEDULER_CONFIG, useValue: scheduler },
       ],
-      exports: [APP_ROLES, REFERENCE_LOOKUP_POLICY],
+      exports: [APP_ROLES, REFERENCE_LOOKUP_POLICY, SCHEDULER_CONFIG],
     };
   }
 }
@@ -62,6 +70,7 @@ export class AppModule {
         AppConfigModule.forRoot(
           options.roles ?? new Set<AppRole>(['api']),
           options.referenceLookup ?? referenceLookupConfigFromEnv({}),
+          options.scheduler ?? schedulerConfigFromEnv({}),
         ),
         PersistenceModule.forRoot({
           databaseUrl: options.databaseUrl,

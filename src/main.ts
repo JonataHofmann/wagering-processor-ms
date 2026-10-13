@@ -8,6 +8,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { parseAppRoles } from './config/app-roles';
 import { sqsConfigFromEnv } from './modules/messaging/infrastructure/sqs/sqs.config';
+import { schedulerConfigFromEnv } from './modules/wagering/infrastructure/scheduler/scheduler.config';
 
 const logger = new Logger('Bootstrap');
 
@@ -20,6 +21,7 @@ async function bootstrap(): Promise<void> {
       sqs: sqsConfigFromEnv(),
       relay: relayConfigFromEnv(),
       referenceLookup: referenceLookupConfigFromEnv(),
+      scheduler: schedulerConfigFromEnv(),
     }),
     { bufferLogs: true },
   );

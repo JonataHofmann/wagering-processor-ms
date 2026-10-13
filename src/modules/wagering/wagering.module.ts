@@ -46,6 +46,11 @@ import {
   type ReferenceLookupPolicy,
 } from './application/reference-lookup.policy';
 import { WagerSettlement } from './application/wager-settlement';
+import { PendingReferenceScheduler } from './infrastructure/scheduler/pending-reference.scheduler';
+import {
+  SCHEDULER_CONFIG,
+  type SchedulerConfig,
+} from './infrastructure/scheduler/scheduler.config';
 import { WagerMessageHandler } from './infrastructure/sqs/wager-message.handler';
 import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactions.consumer';
 
@@ -106,6 +111,33 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
         transactions: WagerTransactionRepository,
       ) => new GetTransactionQuery(tm, transactions),
       inject: [TRANSACTION_MANAGER, WAGER_TRANSACTION_REPOSITORY],
+    },
+    {
+      provide: PendingReferenceScheduler,
+      useFactory: (
+        roles: ReadonlySet<AppRole>,
+        tm: TransactionManager,
+        transactions: WagerTransactionRepository,
+        resolver: ResolvePendingReferenceUseCase,
+        clock: Clock,
+        config: SchedulerConfig,
+      ) =>
+        new PendingReferenceScheduler(
+          roles,
+          tm,
+          transactions,
+          resolver,
+          clock,
+          config,
+        ),
+      inject: [
+        APP_ROLES,
+        TRANSACTION_MANAGER,
+        WAGER_TRANSACTION_REPOSITORY,
+        ResolvePendingReferenceUseCase,
+        CLOCK,
+        SCHEDULER_CONFIG,
+      ],
     },
     {
       provide: WagerMessageHandler,
