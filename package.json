@@ -23,6 +23,7 @@
     "test:load": "bun test/load/load.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-sqs": "^3.1150.0",
     "@mikro-orm/core": "^7.2.5",
     "@mikro-orm/migrations": "^7.2.5",
     "@mikro-orm/nestjs": "^7.1.0",
