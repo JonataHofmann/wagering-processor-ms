@@ -8,6 +8,7 @@ import { WageringModule } from './modules/wagering/wagering.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { HealthController } from './platform/health/health.controller';
 import { ErrorMappingFilter } from './platform/http/error-mapping.filter';
+import { RelayConfig, relayConfigFromEnv } from '@/src/modules/messaging/infrastructure/relay/relay.config';
 
 export interface AppOptions {
   databaseUrl: string;
@@ -16,6 +17,8 @@ export interface AppOptions {
   roles?: ReadonlySet<AppRole>;
   /** obrigatório quando a instância tem papéis que usam fila */
   sqs?: SqsConfig;
+  /** configuração do relay da outbox; padrão: lote 10, lease 30 s, intervalo 500 ms */
+  relay?: RelayConfig;
 }
 
 @Global()
@@ -41,7 +44,10 @@ export class AppModule {
         PersistenceModule.forRoot({
           databaseUrl: options.databaseUrl,
         }),
-        MessagingModule.forRoot(options.sqs),
+        MessagingModule.forRoot({
+          sqs: options.sqs,
+          relay: options.relay ?? relayConfigFromEnv({}),
+        }),
         WalletModule,
         WageringModule,
       ],

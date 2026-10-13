@@ -1,10 +1,11 @@
 import 'reflect-metadata';
 
-import { requireEnv } from '@/src/shared/util/require-env';
+import { AppModule } from './app.module';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
 import { parseAppRoles } from './config/app-roles';
+import { relayConfigFromEnv } from '@/src/modules/messaging/infrastructure/relay/relay.config';
+import { requireEnv } from '@/src/shared/util/require-env';
 import { sqsConfigFromEnv } from './modules/messaging/infrastructure/sqs/sqs.config';
 
 const logger = new Logger('Bootstrap');
@@ -16,6 +17,7 @@ async function bootstrap(): Promise<void> {
       databaseUrl: requireEnv('DATABASE_URL'),
       roles,
       sqs: sqsConfigFromEnv(),
+      relay: relayConfigFromEnv(),
     }),
     { bufferLogs: true },
   );

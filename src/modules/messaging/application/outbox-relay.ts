@@ -16,6 +16,8 @@ export interface OutboxRelayOptions {
   leaseMs: number;
   /** backoff entre tentativas de publicação; padrão: o da OutboxMessage (1 s .. 5 min) */
   backoff?: ExponentialBackoff;
+  /** gancho de teste: roda depois de reservar e antes de publicar */
+  afterClaim?: () => void;
   /** gancho de teste: roda depois de publicar e antes de marcar como publicado */
   afterPublish?: () => void;
 }
@@ -54,6 +56,7 @@ export class OutboxRelay {
       }),
     );
     if (claimed.length === 0) return { claimed: 0, published: 0, failed: 0 };
+    this.options.afterClaim?.();
 
     let outcomes: PublishOutcome[];
     try {

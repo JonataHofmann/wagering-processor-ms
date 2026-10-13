@@ -1,3 +1,9 @@
+import { APP_ROLES, type AppRole } from '@/src/config/app-roles';
+import { CLOCK, type Clock } from '@/src/shared/application/ports/clock.port';
+import {
+  TRANSACTION_MANAGER,
+  type TransactionManager,
+} from '@/src/shared/application/ports/transaction-manager.port';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import {
   type DynamicModule,
@@ -5,7 +11,22 @@ import {
   Inject,
   Module,
   type OnApplicationShutdown,
+  type Provider,
 } from '@nestjs/common';
+import {
+  EVENT_PUBLISHER,
+  type EventPublisher,
+} from './application/ports/event-publisher.port';
+import {
+  OUTBOX_REPOSITORY,
+  type OutboxRepository,
+} from './application/ports/outbox.repository';
+import { OutboxRelayWorker } from './infrastructure/relay/outbox-relay.worker';
+import {
+  RELAY_CONFIG,
+  type RelayConfig,
+} from './infrastructure/relay/relay.config';
+import { SqsEventPublisher } from './infrastructure/sqs/sqs-event-publisher';
 import {
   SQS_CLIENT,
   SQS_CONFIG,
@@ -21,20 +42,61 @@ class SqsClientShutdown implements OnApplicationShutdown {
   }
 }
 
-/** Disponibiliza o cliente e a configuração do SQS. Sem config, nada é registrado (instâncias só de API). */
+export interface MessagingOptions {
+  /** ausente em instâncias só de API */
+  sqs?: SqsConfig;
+  relay: RelayConfig;
+}
+
+/** Cliente SQS, publicador de eventos e o worker do relay da outbox. */
 @Global()
 @Module({})
 export class MessagingModule {
-  static forRoot(config: SqsConfig | undefined): DynamicModule {
-    if (config === undefined) return { module: MessagingModule };
+  static forRoot(options: MessagingOptions): DynamicModule {
+    const { sqs } = options;
+    const sqsProviders: Provider[] =
+      sqs === undefined
+        ? []
+        : [
+            { provide: SQS_CONFIG, useValue: sqs },
+            { provide: SQS_CLIENT, useFactory: () => createSqsClient(sqs) },
+            {
+              provide: EVENT_PUBLISHER,
+              useFactory: (client: SQSClient) =>
+                new SqsEventPublisher(client, sqs.queues.walletEvents),
+              inject: [SQS_CLIENT],
+            },
+            SqsClientShutdown,
+          ];
+
     return {
       module: MessagingModule,
       providers: [
-        { provide: SQS_CONFIG, useValue: config },
-        { provide: SQS_CLIENT, useFactory: () => createSqsClient(config) },
-        SqsClientShutdown,
+        ...sqsProviders,
+        { provide: RELAY_CONFIG, useValue: options.relay },
+        {
+          provide: OutboxRelayWorker,
+          useFactory: (
+            roles: ReadonlySet<AppRole>,
+            tm: TransactionManager,
+            outbox: OutboxRepository,
+            publisher: EventPublisher | undefined,
+            clock: Clock,
+            config: RelayConfig,
+          ) =>
+            new OutboxRelayWorker(roles, tm, outbox, publisher, clock, config),
+          inject: [
+            APP_ROLES,
+            TRANSACTION_MANAGER,
+            OUTBOX_REPOSITORY,
+            { token: EVENT_PUBLISHER, optional: true },
+            CLOCK,
+            RELAY_CONFIG,
+          ],
+        },
       ],
-      exports: [SQS_CONFIG, SQS_CLIENT],
+      exports:
+        sqs === undefined ? [] : [SQS_CONFIG, SQS_CLIENT, EVENT_PUBLISHER],
     };
   }
 }

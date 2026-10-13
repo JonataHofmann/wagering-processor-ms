@@ -8,6 +8,7 @@ export interface SqsConfig {
   queues: {
     wagerTransactions: string;
     wagerTransactionsDlq: string;
+    walletEvents: string;
   };
   consumer: {
     /** long polling: quanto o ReceiveMessage espera por mensagens (0..20 s) */
@@ -38,6 +39,7 @@ export function sqsConfigFromEnv(
     queues: {
       wagerTransactions: env.SQS_WAGER_QUEUE ?? 'wager-transactions.fifo',
       wagerTransactionsDlq: env.SQS_WAGER_DLQ ?? 'wager-transactions-dlq.fifo',
+      walletEvents: env.SQS_EVENTS_QUEUE ?? 'wallet-events.fifo',
     },
     consumer: {
       waitTimeSeconds: Number(env.SQS_WAIT_TIME_SECONDS ?? 20),
