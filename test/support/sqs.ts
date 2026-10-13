@@ -239,3 +239,16 @@ export function relayEnv(
     ...extra,
   };
 }
+
+export function schedulerEnv(
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  return {
+    APP_ROLES: 'scheduler',
+    SCHEDULER_LEASE_MS: '2000',
+    SCHEDULER_IDLE_INTERVAL_MS: '100',
+    PENDING_REFERENCE_BACKOFF_BASE_MS: '200',
+    PENDING_REFERENCE_BACKOFF_MAX_MS: '800',
+    ...extra,
+  };
+}
