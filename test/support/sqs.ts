@@ -154,3 +154,17 @@ export async function waitFor(
     `timed out after ${timeoutMs} ms waiting for: ${description}`,
   );
 }
+export function consumerEnv(
+  queues: TestQueues,
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  return {
+    APP_ROLES: 'api,consumer',
+    SQS_WAGER_QUEUE: queues.config.queues.wagerTransactions,
+    SQS_WAGER_DLQ: queues.config.queues.wagerTransactionsDlq,
+    SQS_WAIT_TIME_SECONDS: String(queues.config.consumer.waitTimeSeconds),
+    SQS_MAX_RECEIVE_COUNT: String(queues.config.consumer.maxReceiveCount),
+    SQS_SHUTDOWN_TIMEOUT_MS: String(queues.config.consumer.shutdownTimeoutMs),
+    ...extra,
+  };
+}

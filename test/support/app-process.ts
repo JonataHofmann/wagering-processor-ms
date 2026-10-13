@@ -6,7 +6,16 @@ export interface AppProcess {
   pid: number;
   baseUrl: string;
   request: RequestFn;
+  /** resolve quando o processo termina (por qualquer motivo) */
+  exited: Promise<void>;
+  /** sinal que matou o processo (ex.: "SIGKILL"), se for o caso */
+  signalCode(): string | null;
+  /** final da saída (stdout + stderr) do processo */
+  output(): string;
+  /** SIGTERM e espera terminar (SIGKILL após 10 s) */
   stop(): Promise<void>;
+  /** SIGKILL imediato, sem shutdown */
+  kill(): Promise<void>;
 }
 
 /** Pede ao sistema uma porta TCP livre. */
@@ -106,6 +115,12 @@ export async function startAppProcess(
   return {
     pid: child.pid,
     baseUrl,
+    exited: child.exited.then(() => undefined),
+    signalCode: () =>
+      child.signalCode === null || child.signalCode === undefined
+        ? null
+        : String(child.signalCode),
+    output: () => output.text,
     request(path, init = {}) {
       return fetch(`${baseUrl}${path}`, {
         method: init.method ?? 'GET',
@@ -128,6 +143,10 @@ export async function startAppProcess(
         child.kill('SIGKILL');
         await child.exited;
       }
+    },
+    async kill() {
+      child.kill('SIGKILL');
+      await child.exited;
     },
   };
 }
