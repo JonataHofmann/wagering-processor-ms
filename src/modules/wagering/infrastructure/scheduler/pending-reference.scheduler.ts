@@ -4,6 +4,7 @@ import type {
   ResolutionOutcome,
   ResolvePendingReferenceUseCase,
 } from '@/src/modules/wagering/application/resolve-pending-reference.use-case';
+import { runWithLogContext } from '@/src/platform/observability/log-context';
 import { faultPoint } from '@/src/platform/testing/fault-injection';
 import type { Clock } from '@/src/shared/application/ports/clock.port';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
@@ -78,15 +79,25 @@ export class PendingReferenceScheduler
   }
 
   private async resolveOne(id: string): Promise<ResolutionOutcome | 'failed'> {
-    try {
-      return await this.resolver.execute(id);
-    } catch (error) {
-      // a reserva vence em leaseMs e a pendência volta a ser tentada
-      this.logger.warn(`could not resolve ${id}: ${(error as Error).message}`);
-      return 'failed';
-    }
+    return runWithLogContext(
+      { job: 'pending-reference', transactionId: id },
+      async () => {
+        try {
+          const outcome = await this.resolver.execute(id);
+          if (outcome !== 'skipped')
+            this.logger.log({ event: 'pending_reference_attempt', outcome });
+          return outcome;
+        } catch (error) {
+          // a reserva vence em leaseMs e a pendência volta a ser tentada
+          this.logger.warn({
+            event: 'pending_reference_failed',
+            error: (error as Error).message,
+          });
+          return 'failed' as const;
+        }
+      },
+    );
   }
-
   private async run(): Promise<void> {
     let consecutiveErrors = 0;
     while (!this.stopping) {

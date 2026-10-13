@@ -2,7 +2,12 @@ import {
   RelayConfig,
   relayConfigFromEnv,
 } from '@/src/modules/messaging/infrastructure/relay/relay.config';
-import { type DynamicModule, Global, Module } from '@nestjs/common';
+import {
+  type DynamicModule,
+  Global,
+  MiddlewareConsumer,
+  Module,
+} from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { APP_ROLES, type AppRole } from './config/app-roles';
 import { PersistenceModule } from './infrastructure/persistence/persistence.module';
@@ -24,6 +29,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { HealthController } from './platform/health/health.controller';
 import { ErrorMappingFilter } from './platform/http/error-mapping.filter';
 
+import { httpContextMiddleware } from './platform/observability/http-context.middleware';
 import { InMemoryMetrics, METRICS } from './platform/observability/metrics';
 export interface AppOptions {
   databaseUrl: string;
@@ -64,6 +70,9 @@ class AppConfigModule {
 
 @Module({})
 export class AppModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(httpContextMiddleware).forRoutes('*');
+  }
   /** Recebe a configuração por parâmetro: main.ts passa o .env; os testes passam um banco isolado. */
   static register(options: AppOptions): DynamicModule {
     return {

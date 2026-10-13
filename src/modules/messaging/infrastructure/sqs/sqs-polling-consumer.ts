@@ -1,3 +1,4 @@
+import { runWithLogContext } from '@/src/platform/observability/log-context';
 import { ExponentialBackoff } from '@/src/shared/domain/backoff';
 import {
   ChangeMessageVisibilityCommand,
@@ -144,13 +145,26 @@ export class SqsPollingConsumer {
   }
 
   private async processGroup(messages: Message[]): Promise<void> {
+    // cada mensagem tem seu contexto de log: o handler o enriquece (messageId, correlationId, walletId...)
+
     for (let i = 0; i < messages.length; i++) {
       if (this.stopping) {
         await this.release(messages.slice(i)); // não iniciadas: devolve para outra instância
         return;
       }
       const message = messages[i]!;
-      const disposition = await this.dispatch(message);
+      const disposition = await runWithLogContext(
+        {
+          sqsMessageId: message.MessageId,
+          receiveCount: receiveCountOf(message),
+          queue: this.options.queueName,
+        },
+        async () => {
+          const result = await this.dispatch(message);
+          await this.apply(message, result);
+          return result;
+        },
+      );
       await this.apply(message, disposition);
 
       if (disposition.action === 'retry') {
@@ -192,12 +206,14 @@ export class SqsPollingConsumer {
     message: Message,
     disposition: MessageDisposition,
   ): Promise<void> {
-    const context = `message ${message.MessageId} (receive #${receiveCountOf(message)})`;
     try {
       switch (disposition.action) {
         case 'ack':
           await this.delete(message);
-          this.logger.debug(`${context}: ack (${disposition.reason})`);
+          this.logger.debug({
+            event: 'sqs_message_acked',
+            reason: disposition.reason,
+          });
           break;
         case 'retry': {
           const delaySeconds = Math.min(
@@ -207,25 +223,31 @@ export class SqsPollingConsumer {
             MAX_VISIBILITY_TIMEOUT_SECONDS,
           );
           await this.changeVisibility(message, delaySeconds);
-          this.logger.warn(
-            `${context}: retry in ${delaySeconds}s (${disposition.reason})`,
-          );
+          this.logger.warn({
+            event: 'sqs_message_retry',
+            delaySeconds,
+            reason: disposition.reason,
+          });
           break;
         }
         case 'dead-letter':
           await this.sendToDeadLetterQueue(message, disposition);
           await this.delete(message);
-          this.logger.error(
-            `${context}: dead-letter ${disposition.reason}: ${disposition.detail}`,
-          );
+          this.logger.error({
+            event: 'sqs_message_dead_lettered',
+            reason: disposition.reason,
+            detail: disposition.detail,
+          });
           break;
       }
     } catch (error) {
       // falha ao falar com o SQS: a mensagem reaparece após o visibility timeout,
       // e a inbox garante que a reentrega não repita o efeito
-      this.logger.error(
-        `${context}: could not apply ${disposition.action}: ${(error as Error).message}`,
-      );
+      this.logger.error({
+        event: 'sqs_disposition_failed',
+        action: disposition.action,
+        error: (error as Error).message,
+      });
     }
   }
 

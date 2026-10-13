@@ -11,6 +11,10 @@ import {
   parseUuidParam,
 } from '@/src/platform/http/request-parsing';
 import {
+  currentLogContext,
+  enrichLogContext,
+} from '@/src/platform/observability/log-context';
+import {
   Body,
   Controller,
   Get,
@@ -19,7 +23,6 @@ import {
   Post,
   Res,
 } from '@nestjs/common';
-
 /** Status HTTP de uma transação aceita para processamento (nova ou replay). */
 const STATUS_BY_RESULT: Readonly<Record<WagerTransactionStatus, number>> = {
   [WagerTransactionStatus.Processed]: 200,
@@ -46,7 +49,6 @@ export class WageringController {
   async submit(
     @Body() body: unknown,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
-    @Headers('x-correlation-id') correlationId: string | undefined,
     @Res({ passthrough: true }) response: StatusSettable,
   ): Promise<TransactionResult> {
     const headers = new RequestParser({ 'Idempotency-Key': idempotencyKey });
@@ -75,7 +77,7 @@ export class WageringController {
       },
     );
     parser.assertValid();
-
+    enrichLogContext({ walletId: walletId! });
     const result = await this.processTransaction.execute({
       idempotencyKey: key!,
       providerId: providerId!,
@@ -87,9 +89,10 @@ export class WageringController {
       kind: kind!,
       money: { amount: amount!, currency: currency! },
       referenceExternalTransactionId,
-      correlationId: correlationId ?? crypto.randomUUID(),
+      correlationId: currentLogContext()?.correlationId ?? crypto.randomUUID(),
     });
 
+    enrichLogContext({ transactionId: result.transactionId });
     response.status(STATUS_BY_RESULT[result.status]);
     return result;
   }

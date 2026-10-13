@@ -9,9 +9,26 @@ import { AppModule } from './app.module';
 import { parseAppRoles } from './config/app-roles';
 import { sqsConfigFromEnv } from './modules/messaging/infrastructure/sqs/sqs.config';
 import { schedulerConfigFromEnv } from './modules/wagering/infrastructure/scheduler/scheduler.config';
-
+import {
+  JsonLogger,
+  type LogLevel,
+  parseLogLevel,
+} from './platform/observability/json-logger';
 const logger = new Logger('Bootstrap');
-
+const ALL_LEVELS: LogLevel[] = [
+  'fatal',
+  'error',
+  'warn',
+  'log',
+  'debug',
+  'verbose',
+];
+function createLogger() {
+  const level = parseLogLevel(process.env.LOG_LEVEL);
+  if ((process.env.LOG_FORMAT ?? 'json') === 'json')
+    return new JsonLogger({ level });
+  return ALL_LEVELS.slice(0, ALL_LEVELS.indexOf(level) + 1);
+}
 async function bootstrap(): Promise<void> {
   const roles = parseAppRoles(process.env.APP_ROLES);
   const app = await NestFactory.create(
@@ -23,7 +40,7 @@ async function bootstrap(): Promise<void> {
       referenceLookup: referenceLookupConfigFromEnv(),
       scheduler: schedulerConfigFromEnv(),
     }),
-    { bufferLogs: true },
+    { bufferLogs: true, logger: createLogger() },
   );
   app.enableShutdownHooks();
 

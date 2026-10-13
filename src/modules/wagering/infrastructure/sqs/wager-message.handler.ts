@@ -11,6 +11,7 @@ import { isTransientDatabaseError } from '@/src/infrastructure/persistence/pg-er
 import { InboxRepository } from '@/src/modules/messaging/application/ports/inbox.repository';
 import { TransactionResult } from '@/src/modules/wagering/application/transaction-view';
 import { DuplicateMessageError } from '@/src/modules/wagering/error/wagering.errors';
+import { enrichLogContext } from '@/src/platform/observability/log-context';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
 import { DomainError } from '@/src/shared/error/domain-error';
 
@@ -43,6 +44,11 @@ export class WagerMessageHandler {
     let parsed;
     try {
       parsed = parseWagerTransactionRequested(rawBody);
+      enrichLogContext({
+        messageId: parsed.messageId,
+        correlationId: parsed.command.correlationId,
+        walletId: parsed.command.walletId,
+      });
     } catch (error) {
       if (error instanceof InvalidMessageError) {
         return {
@@ -66,6 +72,7 @@ export class WagerMessageHandler {
         parsed.command,
         receipt,
       );
+      enrichLogContext({ transactionId: result.transactionId });
       return { action: 'ack', reason: 'processed', result };
     } catch (error) {
       return this.classify(error, receipt);

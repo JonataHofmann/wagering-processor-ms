@@ -13,13 +13,17 @@ export class LoggingReconciliationAlerts implements ReconciliationAlerts {
   constructor(private readonly metrics: Metrics) {}
 
   walletChecked(report: WalletReconciliation): void {
-    this.metrics.increment('wallet_reconciliation_checks_total', { result: report.consistent ? 'consistent' : 'divergent' });
+    this.metrics.increment('wallet_reconciliation_checks_total', {
+      result: report.consistent ? 'consistent' : 'divergent',
+    });
     if (report.consistent) return;
 
     for (const discrepancy of report.discrepancies) {
-      this.metrics.increment('wallet_reconciliation_divergences_total', { code: discrepancy.code });
+      this.metrics.increment('wallet_reconciliation_divergences_total', {
+        code: discrepancy.code,
+      });
     }
-    this.logger.error(JSON.stringify({
+    this.logger.error({
       event: 'WALLET_LEDGER_DIVERGENCE',
       walletId: report.walletId,
       storedBalance: report.storedBalance,
@@ -28,14 +32,17 @@ export class LoggingReconciliationAlerts implements ReconciliationAlerts {
       walletVersion: report.walletVersion,
       lastLedgerVersion: report.lastLedgerVersion,
       discrepancies: report.discrepancies,
-    }));
+    });
   }
 
   fullRunCompleted(summary: { checked: number; divergent: number }): void {
     this.metrics.set('wallet_reconciliation_last_run_wallets', summary.checked);
-    this.metrics.set('wallet_reconciliation_last_run_divergent_wallets', summary.divergent);
-    const message = `full reconciliation: ${summary.checked} wallets checked, ${summary.divergent} divergent`;
-    if (summary.divergent > 0) this.logger.error(message);
-    else this.logger.log(message);
+    this.metrics.set(
+      'wallet_reconciliation_last_run_divergent_wallets',
+      summary.divergent,
+    );
+    const entry = { event: 'reconciliation_completed', ...summary };
+    if (summary.divergent > 0) this.logger.error(entry);
+    else this.logger.log(entry);
   }
 }

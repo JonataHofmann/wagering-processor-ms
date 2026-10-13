@@ -13,6 +13,7 @@ import { hostname } from 'node:os';
 import { OutboxRelay } from '@/src/modules/messaging/application/outbox-relay';
 import { EventPublisher } from '@/src/modules/messaging/application/ports/event-publisher.port';
 import { OutboxRepository } from '@/src/modules/messaging/application/ports/outbox.repository';
+import { runWithLogContext } from '@/src/platform/observability/log-context';
 import type { RelayConfig } from './relay.config';
 
 /**
@@ -78,7 +79,16 @@ export class OutboxRelayWorker
     let consecutiveErrors = 0;
     while (!this.stopping) {
       try {
-        const round = await relay.relayOnce();
+        const round = await runWithLogContext({ job: 'outbox-relay' }, () =>
+          relay.relayOnce(),
+        );
+        consecutiveErrors = 0;
+        if (round.failed > 0)
+          this.logger.warn({
+            event: 'outbox_round_with_failures',
+            job: 'outbox-relay',
+            ...round,
+          });
         consecutiveErrors = 0;
         if (round.failed > 0)
           this.logger.warn(

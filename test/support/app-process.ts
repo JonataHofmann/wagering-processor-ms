@@ -41,7 +41,7 @@ function drain(
     for await (const chunk of stream) {
       const text = decoder.decode(chunk, { stream: true });
       if (echo) globalThis.process.stderr.write(text);
-      sink.text = (sink.text + text).slice(-8_000);
+      sink.text = (sink.text + text).slice(-500_000);
     }
   })().catch(() => undefined);
 }
