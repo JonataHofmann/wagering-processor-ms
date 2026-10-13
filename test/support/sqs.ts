@@ -4,6 +4,7 @@ import {
 } from '@/src/modules/messaging/infrastructure/sqs/sqs.config';
 import {
   CreateQueueCommand,
+  DeleteMessageCommand,
   DeleteQueueCommand,
   GetQueueAttributesCommand,
   type MessageAttributeValue,
@@ -16,6 +17,15 @@ export interface TestQueues {
   config: SqsConfig;
   client: SQSClient;
   /** envia uma mensagem para a fila principal, como um provedor faria */
+  /** consome (e apaga) o que chegou na fila de eventos desde a última chamada */
+  drainEvents(): Promise<
+    Array<{
+      body: Record<string, any>;
+      groupId?: string;
+      deduplicationId?: string;
+      eventType?: string;
+    }>
+  >;
   send(
     body: unknown,
     options: { groupId: string; deduplicationId?: string },
@@ -39,6 +49,7 @@ export async function createTestQueues(
   const base = sqsConfigFromEnv();
   const suffix = crypto.randomUUID().replaceAll('-', '').slice(0, 16);
   const mainName = `wt-${suffix}.fifo`;
+  const eventsName = `wt-events-${suffix}.fifo`;
   const dlqName = `wt-dlq-${suffix}.fifo`;
   const maxReceiveCount = options.maxReceiveCount ?? 3;
 
@@ -77,10 +88,19 @@ export async function createTestQueues(
       },
     }),
   );
-
+  const events = await client.send(
+    new CreateQueueCommand({
+      QueueName: eventsName,
+      Attributes: { FifoQueue: 'true', ContentBasedDeduplication: 'false' },
+    }),
+  );
   const config: SqsConfig = {
     ...base,
-    queues: { wagerTransactions: mainName, wagerTransactionsDlq: dlqName },
+    queues: {
+      wagerTransactions: mainName,
+      wagerTransactionsDlq: dlqName,
+      walletEvents: eventsName,
+    },
     consumer: { waitTimeSeconds: 1, maxReceiveCount, shutdownTimeoutMs: 5_000 },
   };
 
@@ -127,12 +147,49 @@ export async function createTestQueues(
         attributes: m.MessageAttributes ?? {},
       }));
     },
+    async drainEvents() {
+      const received: Array<{
+        body: Record<string, any>;
+        groupId?: string;
+        deduplicationId?: string;
+        eventType?: string;
+      }> = [];
+      for (;;) {
+        const { Messages } = await client.send(
+          new ReceiveMessageCommand({
+            QueueUrl: events.QueueUrl,
+            MaxNumberOfMessages: 10,
+            WaitTimeSeconds: 1,
+            AttributeNames: ['All'],
+            MessageAttributeNames: ['All'],
+          }),
+        );
+        if (!Messages || Messages.length === 0) return received;
+        for (const m of Messages) {
+          received.push({
+            body: JSON.parse(m.Body ?? '{}'),
+            groupId: m.Attributes?.MessageGroupId,
+            deduplicationId: m.Attributes?.MessageDeduplicationId,
+            eventType: m.MessageAttributes?.eventType?.StringValue,
+          });
+          await client.send(
+            new DeleteMessageCommand({
+              QueueUrl: events.QueueUrl,
+              ReceiptHandle: m.ReceiptHandle,
+            }),
+          );
+        }
+      }
+    },
     async drop() {
       await client
         .send(new DeleteQueueCommand({ QueueUrl: main.QueueUrl }))
         .catch(() => undefined);
       await client
         .send(new DeleteQueueCommand({ QueueUrl: dlq.QueueUrl }))
+        .catch(() => undefined);
+      await client
+        .send(new DeleteQueueCommand({ QueueUrl: events.QueueUrl }))
         .catch(() => undefined);
       client.destroy();
     },
@@ -165,6 +222,20 @@ export function consumerEnv(
     SQS_WAIT_TIME_SECONDS: String(queues.config.consumer.waitTimeSeconds),
     SQS_MAX_RECEIVE_COUNT: String(queues.config.consumer.maxReceiveCount),
     SQS_SHUTDOWN_TIMEOUT_MS: String(queues.config.consumer.shutdownTimeoutMs),
+    SQS_EVENTS_QUEUE: queues.config.queues.walletEvents,
+    ...extra,
+  };
+}
+
+export function relayEnv(
+  queues: TestQueues,
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  return {
+    APP_ROLES: 'relay',
+    SQS_EVENTS_QUEUE: queues.config.queues.walletEvents,
+    OUTBOX_LEASE_MS: '2000', // lease curto: o teste não precisa esperar 30 s
+    OUTBOX_IDLE_INTERVAL_MS: '100',
     ...extra,
   };
 }

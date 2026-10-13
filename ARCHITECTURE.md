@@ -469,7 +469,45 @@ silêncio; a DLQ a preserva para investigação.
 - Resiliência (processos reais): SIGKILL entre o commit e o ack (ponto de injeção de falha
   determinístico via `FAULT_INJECTION`), SIGTERM com mensagem em andamento, esgotamento de
   tentativas.
+### ADR-014 — Transactional outbox com relay por lease
 
+**Status:** Aceito
+
+**Decisão.**
+- O caso de uso grava os eventos na outbox na MESMA transação do efeito financeiro;
+  nada é publicado antes do commit, porque quem publica é o relay, lendo o que já foi confirmado.
+- Cada rodada do relay: (1) reserva um lote com `UPDATE ... WHERE id IN (SELECT ... FOR UPDATE
+  SKIP LOCKED) RETURNING`, gravando um lease (`locked_until`, `locked_by`); (2) publica fora de
+  transação; (3) marca os publicados e agenda os que falharam, em transação curta.
+- Publicação no `wallet-events.fifo` com `SendMessageBatch`: `MessageGroupId` = aggregateId
+  (ordem por wallet), `MessageDeduplicationId` = eventId, corpo = envelope gravado.
+- Falha de publicação: backoff de 1 s até 5 min, sem limite de tentativas (evento confirmado
+  não pode ser perdido). Broker fora do ar: o lote inteiro entra no backoff.
+- Worker ativado pelo papel `relay`; para no `beforeApplicationShutdown`.
+
+**Por que lease e não lock de transação durante a publicação.** Segurar uma transação aberta
+durante I/O de rede prenderia uma conexão do pool pelo tempo da chamada ao broker. O lease
+é gravado na linha e vale sem conexão aberta; se o relay morrer, ele vence e outro assume.
+
+**Garantia de entrega: at-least-once.** Publicar no broker e marcar no banco não podem ser
+atômicos. Se o relay morrer entre os dois, o evento é publicado de novo, com o mesmo eventId.
+O SQS FIFO descarta a cópia dentro de 5 minutos (otimização); a garantia é o consumidor
+deduplicar pelo eventId.
+
+**Limitações.**
+- Relays diferentes podem publicar eventos da mesma wallet fora de ordem; os eventos carregam
+  `walletVersion` para o consumidor ordenar e descartar obsoletos.
+- O lease usa o relógio de cada instância; uma diferença de relógio maior que o lease (30 s)
+  poderia gerar publicação duplicada, já tolerada.
+
+**Verificação.**
+- Lógica (banco real, publicador em memória): ordem, 4 relays e 200 eventos sem duplicata,
+  lease, relay morto antes e depois de publicar, falha parcial, broker fora do ar.
+- Ponta a ponta (fila real): uma aposta vira eventos no `wallet-events.fifo`; corpo idêntico
+  ao gravado; instância sem o papel não publica.
+- Resiliência (processos reais): o cenário do enunciado (commit confirmado, relay morto antes
+  de publicar, outra instância assume e publica), relay morto depois de publicar
+  (republicação segura) e 3 relays em processos separados sem perda.
 ## 6. Domínio e componentes compartilhados
 
 ### 6.1 Erros do domínio
