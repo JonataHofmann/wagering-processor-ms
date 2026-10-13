@@ -46,7 +46,7 @@ async function bootstrap(): Promise<void> {
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
-  logger.log(`HTTP listening on :${port} (roles: ${[...roles].join(',')})`);
+  logger.log({ event: 'app_started', port, roles: [...roles] });
 }
 
 void bootstrap().catch((error: unknown) => {
