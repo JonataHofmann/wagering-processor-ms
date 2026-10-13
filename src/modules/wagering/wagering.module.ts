@@ -39,13 +39,27 @@ import {
   SQS_CONFIG,
   type SqsConfig,
 } from '@/src/modules/messaging/infrastructure/sqs/sqs.config';
+import { ResolvePendingReferenceUseCase } from '@/src/modules/wagering/application/resolve-pending-reference.use-case';
 import type { SQSClient } from '@aws-sdk/client-sqs';
+import {
+  REFERENCE_LOOKUP_POLICY,
+  type ReferenceLookupPolicy,
+} from './application/reference-lookup.policy';
+import { WagerSettlement } from './application/wager-settlement';
 import { WagerMessageHandler } from './infrastructure/sqs/wager-message.handler';
 import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactions.consumer';
 
 @Module({
   controllers: [WageringController],
   providers: [
+    {
+      provide: WagerSettlement,
+      useFactory: (
+        transactions: WagerTransactionRepository,
+        ids: IdGenerator,
+      ) => new WagerSettlement(transactions, ids),
+      inject: [WAGER_TRANSACTION_REPOSITORY, ID_GENERATOR],
+    },
     {
       provide: ProcessWagerTransactionUseCase,
       useFactory: (
@@ -57,6 +71,8 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
         outbox: OutboxRepository,
         ids: IdGenerator,
         clock: Clock,
+        settlement: WagerSettlement,
+        referenceLookup: ReferenceLookupPolicy,
       ) =>
         new ProcessWagerTransactionUseCase({
           transactionManager,
@@ -67,6 +83,8 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
           outbox,
           ids,
           clock,
+          settlement,
+          referenceLookup,
         }),
       inject: [
         TRANSACTION_MANAGER,
@@ -77,6 +95,8 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
         OUTBOX_REPOSITORY,
         ID_GENERATOR,
         CLOCK,
+        WagerSettlement,
+        REFERENCE_LOOKUP_POLICY,
       ],
     },
     {
@@ -115,8 +135,45 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
         { token: SQS_CONFIG, optional: true },
       ],
     },
+    {
+      provide: ResolvePendingReferenceUseCase,
+      useFactory: (
+        transactionManager: TransactionManager,
+        wallets: WalletRepository,
+        ledger: LedgerRepository,
+        transactions: WagerTransactionRepository,
+        outbox: OutboxRepository,
+        clock: Clock,
+        settlement: WagerSettlement,
+        referenceLookup: ReferenceLookupPolicy,
+      ) =>
+        new ResolvePendingReferenceUseCase({
+          transactionManager,
+          wallets,
+          ledger,
+          transactions,
+          outbox,
+          clock,
+          settlement,
+          referenceLookup,
+        }),
+      inject: [
+        TRANSACTION_MANAGER,
+        WALLET_REPOSITORY,
+        LEDGER_REPOSITORY,
+        WAGER_TRANSACTION_REPOSITORY,
+        OUTBOX_REPOSITORY,
+        CLOCK,
+        WagerSettlement,
+        REFERENCE_LOOKUP_POLICY,
+      ],
+    },
   ],
   // exportado para o consumer SQS (etapa 14) reutilizar o mesmo caso de uso
-  exports: [ProcessWagerTransactionUseCase, WagerMessageHandler],
+  exports: [
+    ProcessWagerTransactionUseCase,
+    WagerMessageHandler,
+    ResolvePendingReferenceUseCase,
+  ],
 })
 export class WageringModule {}

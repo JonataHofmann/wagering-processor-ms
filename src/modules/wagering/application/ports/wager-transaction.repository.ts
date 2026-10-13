@@ -12,6 +12,18 @@ export interface WagerTransactionRepository {
   hasProcessedReversal(referenceTransactionId: string): Promise<boolean>;
   insert(transaction: WagerTransaction): Promise<void>;
   update(transaction: WagerTransaction): Promise<void>;
+  claimDuePendingReferences(request: {
+    now: Date;
+    leaseMs: number;
+    limit: number;
+  }): Promise<string[]>;
+
+  /** Antecipa para `now` as pendências que esperam por (providerId, externalTransactionId). */
+  expediteWaitingFor(
+    providerId: string,
+    externalTransactionId: string,
+    now: Date,
+  ): Promise<number>;
 }
 
 export const WAGER_TRANSACTION_REPOSITORY = Symbol(

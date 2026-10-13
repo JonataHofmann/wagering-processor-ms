@@ -84,4 +84,48 @@ export class MikroWagerTransactionRepository implements WagerTransactionReposito
       );
     }
   }
+  async claimDuePendingReferences({
+    now,
+    leaseMs,
+    limit,
+  }: {
+    now: Date;
+    leaseMs: number;
+    limit: number;
+  }): Promise<string[]> {
+    // usa o índice parcial ix_wtx_pending_due (status = 'PENDING_REFERENCE', next_attempt_at)
+    const rows = await this.context
+      .current()
+      .execute<Array<{ id: string; next_attempt_at: Date }>>(
+        `UPDATE wager_transactions
+          SET next_attempt_at = ?, updated_at = ?
+        WHERE id IN (
+          SELECT id FROM wager_transactions
+           WHERE status = 'PENDING_REFERENCE' AND next_attempt_at <= ?
+           ORDER BY next_attempt_at, id
+           LIMIT ?
+           FOR UPDATE SKIP LOCKED)
+        RETURNING id`,
+        [new Date(now.getTime() + leaseMs), now, now, limit],
+      );
+    return rows.map((row) => row.id);
+  }
+
+  async expediteWaitingFor(
+    providerId: string,
+    externalTransactionId: string,
+    now: Date,
+  ): Promise<number> {
+    // usa o índice parcial ix_wtx_pending_by_reference
+    return this.context.current().nativeUpdate(
+      WagerTransactionSchema,
+      {
+        status: 'PENDING_REFERENCE',
+        providerId,
+        referenceExternalTransactionId: externalTransactionId,
+        nextAttemptAt: { $gt: now },
+      },
+      { nextAttemptAt: now, updatedAt: now },
+    );
+  }
 }

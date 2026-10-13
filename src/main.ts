@@ -1,11 +1,12 @@
 import 'reflect-metadata';
 
-import { AppModule } from './app.module';
+import { relayConfigFromEnv } from '@/src/modules/messaging/infrastructure/relay/relay.config';
+import { referenceLookupConfigFromEnv } from '@/src/modules/wagering/application/reference-lookup.policy';
+import { requireEnv } from '@/src/shared/util/require-env';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
 import { parseAppRoles } from './config/app-roles';
-import { relayConfigFromEnv } from '@/src/modules/messaging/infrastructure/relay/relay.config';
-import { requireEnv } from '@/src/shared/util/require-env';
 import { sqsConfigFromEnv } from './modules/messaging/infrastructure/sqs/sqs.config';
 
 const logger = new Logger('Bootstrap');
@@ -18,6 +19,7 @@ async function bootstrap(): Promise<void> {
       roles,
       sqs: sqsConfigFromEnv(),
       relay: relayConfigFromEnv(),
+      referenceLookup: referenceLookupConfigFromEnv(),
     }),
     { bufferLogs: true },
   );

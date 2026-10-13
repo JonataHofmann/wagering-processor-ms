@@ -1,14 +1,23 @@
+import {
+  RelayConfig,
+  relayConfigFromEnv,
+} from '@/src/modules/messaging/infrastructure/relay/relay.config';
 import { type DynamicModule, Global, Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { APP_ROLES, type AppRole } from './config/app-roles';
 import { PersistenceModule } from './infrastructure/persistence/persistence.module';
 import type { SqsConfig } from './modules/messaging/infrastructure/sqs/sqs.config';
 import { MessagingModule } from './modules/messaging/messaging.module';
+import {
+  REFERENCE_LOOKUP_POLICY,
+  type ReferenceLookupConfig,
+  referenceLookupConfigFromEnv,
+  ReferenceLookupPolicy,
+} from './modules/wagering/application/reference-lookup.policy';
 import { WageringModule } from './modules/wagering/wagering.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { HealthController } from './platform/health/health.controller';
 import { ErrorMappingFilter } from './platform/http/error-mapping.filter';
-import { RelayConfig, relayConfigFromEnv } from '@/src/modules/messaging/infrastructure/relay/relay.config';
 
 export interface AppOptions {
   databaseUrl: string;
@@ -19,16 +28,26 @@ export interface AppOptions {
   sqs?: SqsConfig;
   /** configuração do relay da outbox; padrão: lote 10, lease 30 s, intervalo 500 ms */
   relay?: RelayConfig;
+  referenceLookup?: ReferenceLookupConfig;
 }
 
 @Global()
 @Module({})
 class AppConfigModule {
-  static forRoot(roles: ReadonlySet<AppRole>): DynamicModule {
+  static forRoot(
+    roles: ReadonlySet<AppRole>,
+    referenceLookup: ReferenceLookupConfig,
+  ): DynamicModule {
     return {
       module: AppConfigModule,
-      providers: [{ provide: APP_ROLES, useValue: roles }],
-      exports: [APP_ROLES],
+      providers: [
+        { provide: APP_ROLES, useValue: roles },
+        {
+          provide: REFERENCE_LOOKUP_POLICY,
+          useValue: new ReferenceLookupPolicy(referenceLookup),
+        },
+      ],
+      exports: [APP_ROLES, REFERENCE_LOOKUP_POLICY],
     };
   }
 }
@@ -40,7 +59,10 @@ export class AppModule {
     return {
       module: AppModule,
       imports: [
-        AppConfigModule.forRoot(options.roles ?? new Set<AppRole>(['api'])),
+        AppConfigModule.forRoot(
+          options.roles ?? new Set<AppRole>(['api']),
+          options.referenceLookup ?? referenceLookupConfigFromEnv({}),
+        ),
         PersistenceModule.forRoot({
           databaseUrl: options.databaseUrl,
         }),

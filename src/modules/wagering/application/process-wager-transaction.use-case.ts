@@ -1,61 +1,31 @@
-import type { OutboxRepository } from '@/src/modules/messaging/application/ports/outbox.repository';
-import { OutboxMessage } from '@/src/modules/messaging/domain/outbox-message';
-import { WalletBalanceChanged } from '@/src/modules/wagering/domain/events/wallet-balance-changed.event'; //REVISAR
-import { FailureCode } from '@/src/modules/wagering/error/failure-code';
-import type { LedgerRepository } from '@/src/modules/wallet/application/ports/ledger.repository';
-import type { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';
-import { LedgerDirection } from '@/src/modules/wallet/domain/ledger-direction';
-import type { Wallet } from '@/src/modules/wallet/domain/wallet';
-import { ResourceNotFoundError } from '@/src/shared/application/application-errors';
-import type { Clock } from '@/src/shared/application/ports/clock.port';
-import type { IdGenerator } from '@/src/shared/application/ports/id-generator.port';
-import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
-import type {
-  EventContext,
-  IntegrationEvent,
-} from '@/src/shared/domain/integration-event';
-import { Money, type MoneyProps } from '@/src/shared/domain/money';
-
-import { computePayloadHash } from '@/src/modules/wagering/application/payload-hash';
-import { WagerTransactionRepository } from '@/src/modules/wagering/application/ports/wager-transaction.repository';
-import { REFERENCE_LOOKUP } from '@/src/modules/wagering/application/reference-lookup.policy';
-import {
-  TransactionResult,
-  toTransactionResult,
-} from '@/src/modules/wagering/application/transaction-view';
-import { WagerTransactionPendingReference } from '@/src/modules/wagering/domain/events/wager-transaction-pending-reference.event';
-import { WagerTransactionProcessed } from '@/src/modules/wagering/domain/events/wager-transaction-processed.event';
-import { WagerTransactionRejected } from '@/src/modules/wagering/domain/events/wager-transaction-rejected.event';
-import { evaluateReference } from '@/src/modules/wagering/domain/reference-policy';
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
-import { WagerTransactionKind } from '@/src/modules/wagering/domain/wager-transaction-kind';
-import { WagerTransactionStatus } from '@/src/modules/wagering/domain/wager-transaction-status';
-import { DuplicateWagerTransactionError } from '@/src/modules/wagering/error/wager-transaction.errors';
-import { WalletLedgerEntry } from '@/src/modules/wallet/domain/wallet-ledger-entry';
-
 import type { InboxRepository } from '@/src/modules/messaging/application/ports/inbox.repository';
+import type { OutboxRepository } from '@/src/modules/messaging/application/ports/outbox.repository';
 import { InboxMessage } from '@/src/modules/messaging/domain/inbox-message';
+import { DuplicateWagerTransactionError } from '@/src/modules/wagering/error/wager-transaction.errors';
 import {
   DuplicateMessageError,
   IdempotencyKeyReusedError,
 } from '@/src/modules/wagering/error/wagering.errors';
+import type { LedgerRepository } from '@/src/modules/wallet/application/ports/ledger.repository';
+import type { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';
+import { ResourceNotFoundError } from '@/src/shared/application/application-errors';
+import type { Clock } from '@/src/shared/application/ports/clock.port';
+import type { IdGenerator } from '@/src/shared/application/ports/id-generator.port';
+import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
 
-export interface InboxReceipt {
-  consumerName: string;
-  messageId: string;
-  payloadHash: string;
-}
+import { computePayloadHash } from '@/src/modules/wagering/application/payload-hash';
 
-export interface ProcessWagerTransactionDependencies {
-  transactionManager: TransactionManager;
-  inbox: InboxRepository;
-  wallets: WalletRepository;
-  ledger: LedgerRepository;
-  transactions: WagerTransactionRepository;
-  outbox: OutboxRepository;
-  ids: IdGenerator;
-  clock: Clock;
-}
+import type { WagerTransactionRepository } from './ports/wager-transaction.repository';
+
+import { ReferenceLookupPolicy } from '@/src/modules/wagering/application/reference-lookup.policy';
+import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
+import { WagerTransactionKind } from '@/src/modules/wagering/domain/wager-transaction-kind';
+import { Money, MoneyProps } from '@/src/shared/domain/money';
+import {
+  toTransactionResult,
+  type TransactionResult,
+} from './transaction-view';
+import type { WagerSettlement } from './wager-settlement';
 
 export interface ProcessWagerTransactionCommand {
   idempotencyKey: string;
@@ -73,14 +43,27 @@ export interface ProcessWagerTransactionCommand {
   causationId?: string;
 }
 
+/**
+ * Mensagem de origem (SQS). Quando presente, o registro na inbox entra na MESMA
+ * transação do efeito financeiro: ou os dois são confirmados, ou nenhum.
+ */
+export interface InboxReceipt {
+  consumerName: string;
+  messageId: string;
+  payloadHash: string;
+}
+
 export interface ProcessWagerTransactionDependencies {
   transactionManager: TransactionManager;
+  inbox: InboxRepository;
   wallets: WalletRepository;
   ledger: LedgerRepository;
   transactions: WagerTransactionRepository;
   outbox: OutboxRepository;
   ids: IdGenerator;
   clock: Clock;
+  settlement: WagerSettlement;
+  referenceLookup: ReferenceLookupPolicy;
 }
 
 /**
@@ -199,125 +182,32 @@ export class ProcessWagerTransactionUseCase {
     });
 
     const expectedVersion = wallet.version;
-    const entry = await this.decide(transaction, wallet, now);
+    const entry = await this.deps.settlement.decide(
+      transaction,
+      wallet,
+      now,
+      () =>
+        transaction.markPendingReference(
+          this.deps.referenceLookup.firstSchedule(now),
+        ),
+    ); // fora de ordem: espera
 
     if (entry !== undefined) await wallets.update(wallet, expectedVersion);
     await transactions.insert(transaction); // DuplicateWagerTransactionError se outra venceu
     if (entry !== undefined) await ledger.append(entry);
     await outbox.enqueue(
-      this.eventsFor(transaction, wallet, entry, command, now),
+      this.deps.settlement.eventsFor(transaction, wallet, entry, command, now),
     );
 
-    return toTransactionResult(transaction, false);
-  }
-
-  /**
-   * Aplica as regras e muda o estado da transação (e da wallet, se houver movimento).
-   * Devolve o lançamento quando o saldo mudou.
-   */
-  private async decide(
-    tx: WagerTransaction,
-    wallet: Wallet,
-    now: Date,
-  ): Promise<WalletLedgerEntry | undefined> {
-    const observed = { balanceSnapshot: wallet.balance };
-
-    if (wallet.playerId !== tx.playerId) {
-      tx.reject(FailureCode.WalletPlayerMismatch, observed);
-      return undefined;
-    }
-    if (wallet.currency !== tx.money.currency) {
-      tx.reject(FailureCode.CurrencyMismatch, observed);
-      return undefined;
-    }
-
-    let reference: WagerTransaction | undefined;
-    if (tx.referenceExternalTransactionId !== undefined) {
-      reference = await this.deps.transactions.findByExternalId(
-        tx.providerId,
-        tx.referenceExternalTransactionId,
+    // atalho: quem estava esperando por esta transação não precisa esperar o próximo ciclo do backoff
+    if (transaction.isTerminal()) {
+      await transactions.expediteWaitingFor(
+        transaction.providerId,
+        transaction.externalTransactionId,
+        now,
       );
-      if (reference === undefined) {
-        tx.markPendingReference(REFERENCE_LOOKUP.firstSchedule(now)); // fora de ordem: espera (etapa 16)
-        return undefined;
-      }
-      const referenceAlreadyReversed = tx.isReversal()
-        ? await this.deps.transactions.hasProcessedReversal(reference.id)
-        : false;
-      const failure = evaluateReference({
-        transaction: tx,
-        reference,
-        referenceAlreadyReversed,
-      });
-      if (failure !== undefined) {
-        tx.reject(failure, observed);
-        return undefined;
-      }
     }
 
-    if (!tx.affectsBalance()) {
-      tx.markProcessed({
-        at: now,
-        balanceSnapshot: wallet.balance,
-        referenceTransactionId: reference?.id,
-      });
-      return undefined; // LOSS: registra o resultado sem mover saldo
-    }
-
-    const direction = tx.ledgerDirectionFor(reference);
-    if (direction === LedgerDirection.Debit && !wallet.canDebit(tx.money)) {
-      tx.reject(tx.insufficientFundsFailureCode(), observed);
-      return undefined;
-    }
-
-    const movement = {
-      money: tx.money,
-      transactionId: tx.id,
-      entryId: this.deps.ids.next(),
-      at: now,
-    };
-    const entry =
-      direction === LedgerDirection.Debit
-        ? wallet.debit(movement)
-        : wallet.credit(movement);
-    tx.markProcessed({
-      at: now,
-      balanceSnapshot: wallet.balance,
-      referenceTransactionId: reference?.id,
-    });
-    return entry;
-  }
-
-  private eventsFor(
-    tx: WagerTransaction,
-    wallet: Wallet,
-    entry: WalletLedgerEntry | undefined,
-    command: ProcessWagerTransactionCommand,
-    now: Date,
-  ): OutboxMessage[] {
-    const context = (): EventContext => ({
-      eventId: this.deps.ids.next(),
-      correlationId: command.correlationId,
-      causationId: command.causationId,
-      occurredAt: now,
-    });
-
-    const events: IntegrationEvent<unknown>[] = [];
-    switch (tx.status) {
-      case WagerTransactionStatus.Processed:
-        events.push(WagerTransactionProcessed.from(tx, context()));
-        if (entry !== undefined)
-          events.push(WalletBalanceChanged.from(wallet, entry, context()));
-        break;
-      case WagerTransactionStatus.Rejected:
-        events.push(WagerTransactionRejected.from(tx, context()));
-        break;
-      case WagerTransactionStatus.PendingReference:
-        events.push(WagerTransactionPendingReference.from(tx, context()));
-        break;
-      default:
-        break;
-    }
-    return events.map((event) => OutboxMessage.enqueue(event));
+    return toTransactionResult(transaction, false);
   }
 }
