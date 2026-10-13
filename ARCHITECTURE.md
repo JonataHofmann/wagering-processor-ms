@@ -262,6 +262,7 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
 | `test/support/invariants.ts`      | Invariante saldo = ledger para todas as wallets                                                  |
 | `test/support/fakes.ts`           | `FixedClock`, `SequentialIdGenerator`                                                            |
 | `scripts/checks/sql/*.sql`        | Roteiros manuais de verificação do schema (depuração e apresentação)                             |
+| `bun run test:resilience`         | Falhas com processos reais (lento: espera timeouts)                                              |
 
 **Matriz de concorrência (etapa 12).**
 
@@ -280,26 +281,27 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
 
 **Cobertura dos testes obrigatórios do enunciado.**
 
-| Exigido                                                                        | Situação                      |
-| ------------------------------------------------------------------------------ | ----------------------------- |
-| Operações e validações de `Money` (escala, arredondamento, entradas inválidas) | Coberto (unitário)            |
-| Invariantes da `Wallet`                                                        | Coberto (unitário)            |
-| Regras de BET, WIN, LOSS, REFUND, ROLLBACK                                     | Coberto (unitário e HTTP)     |
-| Conflito de moeda                                                              | Coberto (unitário e HTTP)     |
-| Idempotency key com payload divergente                                         | Coberto (unitário e HTTP)     |
-| Migrations e constraints                                                       | Coberto (schema)              |
-| Atomicidade entre wallet, ledger, inbox e outbox                               | Coberto (persistência e HTTP) |
-| A mesma aposta 50 vezes em paralelo                                            | Coberto (concorrência)        |
-| Disputa pelo saldo da mesma wallet                                             | Coberto (concorrência)        |
-| Wallets distintas em paralelo                                                  | Coberto (concorrência)        |
-| ≥ 3 processos ou instâncias                                                    | Etapa 13                      |
-| Inbox, redelivery, retry e DLQ                                                 | Etapa 14                      |
-| Worker morto depois do commit e antes do ack                                   | Etapa 14                      |
-| Publishers concorrentes sobre a mesma outbox                                   | Etapa 15                      |
-| ROLLBACK ou REFUND antes da referência (processamento posterior)               | Etapa 16                      |
-| Reinício do serviço com consistência final                                     | Etapa 18                      |
-
-**Comandos.**
+| Exigido                                                                        | Situação                                       |
+| ------------------------------------------------------------------------------ | ---------------------------------------------- |
+| Operações e validações de `Money` (escala, arredondamento, entradas inválidas) | Coberto (unitário)                             |
+| Invariantes da `Wallet`                                                        | Coberto (unitário)                             |
+| Regras de BET, WIN, LOSS, REFUND, ROLLBACK                                     | Coberto (unitário e HTTP)                      |
+| Conflito de moeda                                                              | Coberto (unitário e HTTP)                      |
+| Idempotency key com payload divergente                                         | Coberto (unitário e HTTP)                      |
+| Migrations e constraints                                                       | Coberto (schema)                               |
+| Atomicidade entre wallet, ledger, inbox e outbox                               | Coberto (persistência e HTTP)                  |
+| A mesma aposta 50 vezes em paralelo                                            | Coberto (concorrência)                         |
+| Disputa pelo saldo da mesma wallet                                             | Coberto (concorrência)                         |
+| Wallets distintas em paralelo                                                  | Coberto (concorrência)                         |
+| ≥ 3 processos ou instâncias                                                    | Etapa 13                                       |
+| Inbox, redelivery, retry e DLQ                                                 | Etapa 14                                       |
+| Worker morto depois do commit e antes do ack                                   | Etapa 14                                       |
+| Publishers concorrentes sobre a mesma outbox                                   | Etapa 15                                       |
+| ROLLBACK ou REFUND antes da referência (processamento posterior)               | Etapa 16                                       |
+| Reinício do serviço com consistência final                                     | Etapa 18                                       |
+| Inbox, redelivery, retry e DLQ                                                 | Coberto (handler, ponta a ponta e resiliência) |
+| Worker morto depois do commit e antes do ack                                   | Coberto (resiliência, SIGKILL real)            |
+| **Comandos.**                                                                  |
 
 | Comando                                                                | Roda                         |
 | ---------------------------------------------------------------------- | ---------------------------- |
@@ -425,6 +427,48 @@ wallets independentes e replay por instância diferente da que processou.
 
 **Consequências.** Escalar a API é aumentar réplicas. O limite passa a ser o PostgreSQL
 primário e, por wallet, o lock de linha (ADR-010).
+
+### ADR-013 — Consumer SQS: inbox transacional, ack após o commit e classificação de erros
+
+**Status:** Aceito
+
+**Decisão.**
+
+- O consumer reutiliza o `ProcessWagerTransactionUseCase` da API. A mensagem é registrada
+  na inbox (`INSERT ... ON CONFLICT DO NOTHING` em `(consumer_name, message_id)`) dentro da
+  MESMA transação do efeito financeiro, antes do lock da wallet. Com inbox, o fast path de
+  idempotência é pulado: o replay também registra a mensagem, na transação principal.
+- `WagerMessageHandler` decide; `SqsPollingConsumer` executa:
+
+| Desfecho                                                                                        | Decisão     | Execução                                                 |
+| ----------------------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------- |
+| PROCESSED, REJECTED, PENDING_REFERENCE                                                          | ack         | `DeleteMessage` após o handler (logo, após o COMMIT)     |
+| Reentrega já vista (mesmo messageId e conteúdo)                                                 | ack         | `DeleteMessage`                                          |
+| Mensagem inválida, `DomainError` (400/404/409 na API), messageId reutilizado com outro conteúdo | dead-letter | `SendMessage` à DLQ com motivo + `DeleteMessage`         |
+| Falha transitória ou erro inesperado                                                            | retry       | `ChangeMessageVisibility` com backoff (1 s, 2 s... 60 s) |
+| Retry na tentativa `maxReceiveCount`                                                            | dead-letter | `RETRIES_EXHAUSTED`, com o último erro                   |
+
+- Mensagens do mesmo `MessageGroupId` (= walletId) em sequência; grupos em paralelo.
+  Um retry devolve as seguintes do mesmo grupo, preservando a ordem.
+- A DLQ recebe o corpo original e atributos `dlq-reason`, `dlq-detail`,
+  `original-message-id` e `receive-count`. A redrive policy da fila é a rede de segurança.
+- Ativado só nas instâncias com o papel `consumer`. Para no `beforeApplicationShutdown`,
+  antes do pool do banco fechar: termina as mensagens em andamento (até 20 s) e devolve
+  as não iniciadas com visibilidade 0.
+
+**Por que DomainError vai para a DLQ e não para o ack.** Na API, esses erros voltam ao
+provedor como 400/404/409. Na fila não há resposta: um ack descartaria a mensagem em
+silêncio; a DLQ a preserva para investigação.
+
+**Verificação.**
+
+- Handler (só banco): deduplicação, reentregas simultâneas, classificação, inbox desfeita
+  junto com o efeito numa falha transitória.
+- Ponta a ponta (fila real, filas exclusivas por suíte): processamento, duplicata, rejeição,
+  ordem por grupo, DLQ imediata, retry com recuperação, instância sem o papel.
+- Resiliência (processos reais): SIGKILL entre o commit e o ack (ponto de injeção de falha
+  determinístico via `FAULT_INJECTION`), SIGTERM com mensagem em andamento, esgotamento de
+  tentativas.
 
 ## 6. Domínio e componentes compartilhados
 
