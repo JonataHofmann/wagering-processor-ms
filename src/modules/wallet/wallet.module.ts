@@ -33,6 +33,11 @@ import { WalletsController } from './infrastructure/http/wallets.controller';
  * Os casos de uso são classes puras (sem decorators do Nest).
  * O módulo os monta por factory, injetando as portas pelos tokens.
  */
+import { METRICS, type Metrics } from '../../platform/observability/metrics';
+import { RECONCILIATION_ALERTS, type ReconciliationAlerts } from './application/ports/reconciliation-alerts.port';
+import { RECONCILIATION_REPOSITORY, type ReconciliationRepository } from './application/ports/reconciliation.repository';
+import { ReconcileWalletsUseCase } from './application/reconcile-wallets.use-case';
+import { LoggingReconciliationAlerts } from './infrastructure/reconciliation/logging-reconciliation-alerts';
 @Module({
   controllers: [WalletsController],
   providers: [
@@ -81,6 +86,18 @@ import { WalletsController } from './infrastructure/http/wallets.controller';
       ) => new ListLedgerQuery(tm, wallets, ledger),
       inject: [TRANSACTION_MANAGER, WALLET_REPOSITORY, LEDGER_REPOSITORY],
     },
+    {
+      provide: RECONCILIATION_ALERTS,
+      useFactory: (metrics: Metrics) => new LoggingReconciliationAlerts(metrics),
+      inject: [METRICS],
+    },
+    {
+      provide: ReconcileWalletsUseCase,
+      useFactory: (tm: TransactionManager, repository: ReconciliationRepository, alerts: ReconciliationAlerts, clock: Clock) =>
+        new ReconcileWalletsUseCase(tm, repository, alerts, clock),
+      inject: [TRANSACTION_MANAGER, RECONCILIATION_REPOSITORY, RECONCILIATION_ALERTS, CLOCK],
+    },
   ],
+  exports: [ReconcileWalletsUseCase],
 })
 export class WalletModule {}

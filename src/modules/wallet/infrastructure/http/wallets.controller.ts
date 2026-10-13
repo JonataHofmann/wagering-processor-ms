@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 
 
+import { ReconcileWalletsUseCase, type WalletReconciliation } from '../../application/reconcile-wallets.use-case';
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 
@@ -24,7 +25,18 @@ export class WalletsController {
     private readonly createWallet: CreateWalletUseCase,
     private readonly getWallet: GetWalletQuery,
     private readonly listLedger: ListLedgerQuery,
+    private readonly reconcileWallets: ReconcileWalletsUseCase,
   ) {}
+
+  /**
+   * Compara o saldo gravado com o saldo reconstruído pelo ledger. Somente leitura:
+   * uma divergência volta no relatório (200), é registrada em log e métrica, e o saldo NÃO é alterado.
+   */
+  @Post(':walletId/reconciliation')
+  @HttpCode(200)
+  async reconcile(@Param('walletId') walletId: string): Promise<WalletReconciliation> {
+    return this.reconcileWallets.reconcile(parseUuidParam('walletId', walletId));
+  }
 
   @Post()
   @HttpCode(201)

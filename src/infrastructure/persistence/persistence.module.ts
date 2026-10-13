@@ -25,6 +25,8 @@ import { EntityManagerContext } from './entity-manager-context';
 import { MikroTransactionManager } from './mikro-transaction-manager';
 import config from '@/src/infrastructure/persistence/mikro-orm.config';
 
+import { RECONCILIATION_REPOSITORY } from '../../modules/wallet/application/ports/reconciliation.repository';
+import { MikroReconciliationRepository } from '../../modules/wallet/infrastructure/reconciliation/mikro-reconciliation.repository';
 export interface PersistenceOptions {
   databaseUrl: string;
 }
@@ -90,6 +92,11 @@ export class PersistenceModule {
           useFactory: (c: EntityManagerContext) => new MikroOutboxRepository(c),
           inject: ctx,
         },
+        {
+          provide: RECONCILIATION_REPOSITORY,
+          useFactory: (c: EntityManagerContext) => new MikroReconciliationRepository(c),
+          inject: [EntityManagerContext],
+        },
         OrmShutdown,
       ],
       exports: [
@@ -102,6 +109,7 @@ export class PersistenceModule {
         WAGER_TRANSACTION_REPOSITORY,
         INBOX_REPOSITORY,
         OUTBOX_REPOSITORY,
+        RECONCILIATION_REPOSITORY,
       ],
     };
   }

@@ -24,6 +24,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { HealthController } from './platform/health/health.controller';
 import { ErrorMappingFilter } from './platform/http/error-mapping.filter';
 
+import { InMemoryMetrics, METRICS } from './platform/observability/metrics';
 export interface AppOptions {
   databaseUrl: string;
   debug?: boolean;
@@ -54,8 +55,9 @@ class AppConfigModule {
           useValue: new ReferenceLookupPolicy(referenceLookup),
         },
         { provide: SCHEDULER_CONFIG, useValue: scheduler },
+        { provide: METRICS, useValue: new InMemoryMetrics() },
       ],
-      exports: [APP_ROLES, REFERENCE_LOOKUP_POLICY, SCHEDULER_CONFIG],
+      exports: [APP_ROLES, REFERENCE_LOOKUP_POLICY, SCHEDULER_CONFIG, METRICS],
     };
   }
 }
