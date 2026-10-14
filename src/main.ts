@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 
 import { relayConfigFromEnv } from '@/src/modules/messaging/infrastructure/relay/relay.config';
-import { referenceLookupConfigFromEnv } from '@/src/modules/wagering/application/reference-lookup.policy';
+import { referenceLookupConfigFromEnv } from '@/src/modules/wagering/application/use-cases/reference-lookup.policy';
 import { requireEnv } from '@/src/shared/util/require-env';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';

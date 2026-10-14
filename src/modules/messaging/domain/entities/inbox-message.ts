@@ -2,9 +2,9 @@ import {
   MAX_CONSUMER_NAME_LENGTH,
   MAX_MESSAGE_ID_LENGTH,
   PAYLOAD_HASH_PATTERN,
-} from '@/src/modules/messaging/constants/inbox-message.constants';
+} from '@/src/modules/messaging/domain/inbox-message.constants';
 
-import { assertIdentifier } from '@/src/modules/messaging/util/assert-identifier';
+import { assertIdentifier } from '@/src/modules/messaging/domain/assert-identifier';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 
 export interface ReceiveInboxProps {

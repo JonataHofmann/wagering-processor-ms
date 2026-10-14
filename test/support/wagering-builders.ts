@@ -1,9 +1,9 @@
 import {
   CreateWagerTransactionProps,
   WagerTransaction,
-} from '@/src/modules/wagering/domain/wager-transaction';
+} from '@/src/modules/wagering/domain/entities/wager-transaction';
 
-import { WagerTransactionKind as Kind } from '@/src/modules/wagering/domain/wager-transaction-kind';
+import { WagerTransactionKind as Kind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
 import { Money } from '@/src/shared/domain/money';
 
 export const brl = (amount: string): Money =>

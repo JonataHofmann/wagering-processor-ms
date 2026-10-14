@@ -1,6 +1,6 @@
-import type { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
-import { WagerTransactionKind as Kind } from '@/src/modules/wagering/domain/wager-transaction-kind';
-import { WagerTransactionStatus as Status } from '@/src/modules/wagering/domain/wager-transaction-status';
+import type { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
+import { WagerTransactionKind as Kind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
+import { WagerTransactionStatus as Status } from '@/src/modules/wagering/domain/value-objects/wager-transaction-status';
 import { FailureCode } from '@/src/modules/wagering/error/failure-code';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 

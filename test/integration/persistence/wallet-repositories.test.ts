@@ -2,9 +2,9 @@ import { Persistence, createPersistence } from '@/test/support/persistence';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { sqlStateOf } from '@/src/infrastructure/persistence/pg-error';
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
-import { WagerTransactionKind } from '@/src/modules/wagering/domain/wager-transaction-kind';
-import { Wallet } from '@/src/modules/wallet/domain/wallet';
+import { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
+import { WagerTransactionKind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
+import { Wallet } from '@/src/modules/wallet/domain/entities/wallet';
 import { WalletAlreadyExistsError } from '@/src/modules/wallet/error/wallet.errors';
 import { Money } from '@/src/shared/domain/money';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';

@@ -3,9 +3,9 @@ import {
   IntegrationEvent,
 } from '@/src/shared/domain/integration-event';
 
-import { LedgerDirection } from '@/src/modules/wallet/domain/ledger-direction';
-import { Wallet } from '@/src/modules/wallet/domain/wallet';
-import { WalletLedgerEntry } from '@/src/modules/wallet/domain/wallet-ledger-entry';
+import { LedgerDirection } from '@/src/modules/wallet/domain/value-objects/ledger-direction';
+import { Wallet } from '@/src/modules/wallet/domain/entities/wallet';
+import { WalletLedgerEntry } from '@/src/modules/wallet/domain/entities/wallet-ledger-entry';
 import { MoneyProps } from '@/src/shared/domain/money';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 

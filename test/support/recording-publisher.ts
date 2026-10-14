@@ -3,7 +3,7 @@ import type {
   PublishOutcome,
 } from '@/src/modules/messaging/application/ports/event-publisher.port';
 
-import type { OutboxMessage } from '@/src/modules/messaging/domain/outbox-message';
+import type { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
 
 /**
  * Publicador em memória para testar a LÓGICA do relay (reserva, lease, retry) sobre o banco real.

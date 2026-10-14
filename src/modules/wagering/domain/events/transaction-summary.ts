@@ -1,4 +1,4 @@
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
+import { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
 import { MoneyProps } from '@/src/shared/domain/money';
 
 /** Campos comuns aos eventos de transação. Só JSON puro. */

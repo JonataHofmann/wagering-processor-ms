@@ -1,8 +1,8 @@
 import { LedgerEntryRecord } from '@/src/infrastructure/persistence/schemas/ledger-entry.schema';
 import { WalletRecord } from '@/src/infrastructure/persistence/schemas/wallet.schema';
-import { LedgerDirection } from '@/src/modules/wallet/domain/ledger-direction';
-import { Wallet } from '@/src/modules/wallet/domain/wallet';
-import { WalletLedgerEntry } from '@/src/modules/wallet/domain/wallet-ledger-entry';
+import { LedgerDirection } from '@/src/modules/wallet/domain/value-objects/ledger-direction';
+import { Wallet } from '@/src/modules/wallet/domain/entities/wallet';
+import { WalletLedgerEntry } from '@/src/modules/wallet/domain/entities/wallet-ledger-entry';
 import { Money } from '@/src/shared/domain/money';
 
 const money = (amount: string, currency: string): Money =>

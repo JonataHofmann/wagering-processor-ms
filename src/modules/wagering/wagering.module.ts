@@ -20,9 +20,9 @@ import {
   IdGenerator,
 } from '@/src/shared/application/ports/id-generator.port';
 
-import { GetTransactionQuery } from '@/src/modules/wagering/application/get-transaction.query';
-import { ProcessWagerTransactionUseCase } from '@/src/modules/wagering/application/process-wager-transaction.use-case';
-import { WageringController } from '@/src/modules/wagering/infrastructure/http/wagering.controller';
+import { GetTransactionQuery } from '@/src/modules/wagering/application/use-cases/get-transaction.query';
+import { ProcessWagerTransactionUseCase } from '@/src/modules/wagering/application/use-cases/process-wager-transaction.use-case';
+import { WageringController } from '@/src/modules/wagering/presentation/controllers/wagering.controller';
 import {
   TRANSACTION_MANAGER,
   type TransactionManager,
@@ -39,13 +39,13 @@ import {
   SQS_CONFIG,
   type SqsConfig,
 } from '@/src/modules/messaging/infrastructure/sqs/sqs.config';
-import { ResolvePendingReferenceUseCase } from '@/src/modules/wagering/application/resolve-pending-reference.use-case';
+import { ResolvePendingReferenceUseCase } from '@/src/modules/wagering/application/use-cases/resolve-pending-reference.use-case';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import {
   REFERENCE_LOOKUP_POLICY,
   type ReferenceLookupPolicy,
-} from './application/reference-lookup.policy';
-import { WagerSettlement } from './application/wager-settlement';
+} from '@/src/modules/wagering/application/use-cases/reference-lookup.policy';
+import { WagerSettlement } from '@/src/modules/wagering/application/use-cases/wager-settlement';
 import { PendingReferenceScheduler } from './infrastructure/scheduler/pending-reference.scheduler';
 import {
   SCHEDULER_CONFIG,

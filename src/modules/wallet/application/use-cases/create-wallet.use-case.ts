@@ -1,16 +1,16 @@
 import type { OutboxRepository } from '@/src/modules/messaging/application/ports/outbox.repository';
-import { OutboxMessage } from '@/src/modules/messaging/domain/outbox-message';
+import { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
 import type { WagerTransactionRepository } from '@/src/modules/wagering/application/ports/wager-transaction.repository';
 import { WagerTransactionProcessed } from '@/src/modules/wagering/domain/events/wager-transaction-processed.event';
 import { WalletBalanceChanged } from '@/src/modules/wagering/domain/events/wallet-balance-changed.event';
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
+import { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
 import { LedgerRepository } from '@/src/modules/wallet/application/ports/ledger.repository';
 import { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';
 import {
   WalletView,
   toWalletView,
 } from '@/src/modules/wallet/application/use-cases/wallet-view';
-import { Wallet } from '@/src/modules/wallet/domain/wallet';
+import { Wallet } from '@/src/modules/wallet/domain/entities/wallet';
 import type { Clock } from '@/src/shared/application/ports/clock.port';
 import type { IdGenerator } from '@/src/shared/application/ports/id-generator.port';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';

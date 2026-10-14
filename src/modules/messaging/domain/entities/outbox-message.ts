@@ -1,7 +1,7 @@
 import {
   MAX_ERROR_LENGTH,
   OUTBOX_RETRY_BACKOFF,
-} from '@/src/modules/messaging/constants/outbox-message.constants';
+} from '@/src/modules/messaging/domain/outbox-message.constants';
 
 import { ExponentialBackoff } from '@/src/shared/domain/backoff';
 import { IntegrationEvent } from '@/src/shared/domain/integration-event';

@@ -1,8 +1,8 @@
 import {
   OutboxRelay,
   type OutboxRelayOptions,
-} from '@/src/modules/messaging/application/outbox-relay';
-import { OutboxMessage } from '@/src/modules/messaging/domain/outbox-message';
+} from '@/src/modules/messaging/application/use-cases/outbox-relay';
+import { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
 import { ExponentialBackoff } from '@/src/shared/domain/backoff';
 import { IntegrationEvent } from '@/src/shared/domain/integration-event';
 import {

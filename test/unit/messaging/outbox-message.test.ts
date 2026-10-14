@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
-import { OUTBOX_RETRY_BACKOFF } from '@/src/modules/messaging/constants/outbox-message.constants';
-import { OutboxMessage } from '@/src/modules/messaging/domain/outbox-message';
+import { OUTBOX_RETRY_BACKOFF } from '@/src/modules/messaging/domain/outbox-message.constants';
+import { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
 import { ExponentialBackoff } from '@/src/shared/domain/backoff';
 import { IntegrationEvent } from '@/src/shared/domain/integration-event';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';

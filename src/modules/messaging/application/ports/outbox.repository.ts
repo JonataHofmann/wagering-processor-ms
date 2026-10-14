@@ -1,4 +1,4 @@
-import type { OutboxMessage } from '../../domain/outbox-message';
+import type { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
 
 export interface ClaimRequest {
   /** "agora" segundo o relógio da aplicação (injetável nos testes) */

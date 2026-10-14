@@ -4,10 +4,10 @@ import type { LedgerRepository } from '@/src/modules/wallet/application/ports/le
 import type { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';
 import type { Clock } from '@/src/shared/application/ports/clock.port';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
-import { WagerTransactionStatus } from '../domain/wager-transaction-status';
-import type { WagerTransactionRepository } from './ports/wager-transaction.repository';
-import type { ReferenceLookupPolicy } from './reference-lookup.policy';
-import type { WagerSettlement } from './wager-settlement';
+import { WagerTransactionStatus } from '@/src/modules/wagering/domain/value-objects/wager-transaction-status';
+import type { WagerTransactionRepository } from '@/src/modules/wagering/application/ports/wager-transaction.repository';
+import type { ReferenceLookupPolicy } from '@/src/modules/wagering/application/use-cases/reference-lookup.policy';
+import type { WagerSettlement } from '@/src/modules/wagering/application/use-cases/wager-settlement';
 
 /** O que aconteceu com a pendência nesta tentativa. */
 export type ResolutionOutcome =

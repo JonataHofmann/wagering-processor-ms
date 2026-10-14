@@ -2,7 +2,7 @@ import {
   INBOX_REPOSITORY,
   type InboxRepository,
 } from '@/src/modules/messaging/application/ports/inbox.repository';
-import { ProcessWagerTransactionUseCase } from '@/src/modules/wagering/application/process-wager-transaction.use-case';
+import { ProcessWagerTransactionUseCase } from '@/src/modules/wagering/application/use-cases/process-wager-transaction.use-case';
 import { WagerMessageHandler } from '@/src/modules/wagering/infrastructure/sqs/wager-message.handler';
 import {
   TRANSACTION_MANAGER,

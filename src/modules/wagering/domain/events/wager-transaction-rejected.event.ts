@@ -7,8 +7,8 @@ import {
   IntegrationEvent,
 } from '@/src/shared/domain/integration-event';
 
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
-import { WagerTransactionStatus } from '@/src/modules/wagering/domain/wager-transaction-status';
+import { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
+import { WagerTransactionStatus } from '@/src/modules/wagering/domain/value-objects/wager-transaction-status';
 import { FailureCode } from '@/src/modules/wagering/error/failure-code';
 import { MoneyProps } from '@/src/shared/domain/money';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';

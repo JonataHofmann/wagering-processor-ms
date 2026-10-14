@@ -1,8 +1,8 @@
 import { EntityManagerContext } from '@/src/infrastructure/persistence/entity-manager-context';
 import { InboxMessageSchema } from '@/src/infrastructure/persistence/schemas/inbox-message.schema';
 import { InboxRepository } from '@/src/modules/messaging/application/ports/inbox.repository';
-import { InboxMessage } from '@/src/modules/messaging/domain/inbox-message';
-import { InboxMessageMapper } from '@/src/modules/messaging/infrastructure/persistence/messaging.mapper';
+import { InboxMessage } from '@/src/modules/messaging/domain/entities/inbox-message';
+import { InboxMessageMapper } from '@/src/modules/messaging/infrastructure/mappers/messaging.mapper';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 
 export class MikroInboxRepository implements InboxRepository {

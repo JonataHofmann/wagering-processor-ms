@@ -1,7 +1,7 @@
 import {
   InboxReceipt,
   ProcessWagerTransactionUseCase,
-} from '@/src/modules/wagering/application/process-wager-transaction.use-case';
+} from '@/src/modules/wagering/application/use-cases/process-wager-transaction.use-case';
 import {
   InvalidMessageError,
   parseWagerTransactionRequested,
@@ -9,7 +9,7 @@ import {
 
 import { isTransientDatabaseError } from '@/src/infrastructure/persistence/pg-error';
 import { InboxRepository } from '@/src/modules/messaging/application/ports/inbox.repository';
-import { TransactionResult } from '@/src/modules/wagering/application/transaction-view';
+import { TransactionResult } from '@/src/modules/wagering/application/use-cases/transaction-view';
 import { DuplicateMessageError } from '@/src/modules/wagering/error/wagering.errors';
 import { enrichLogContext } from '@/src/platform/observability/log-context';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';

@@ -1,7 +1,7 @@
 import { WagerTransactionRecord } from '@/src/infrastructure/persistence/schemas/wager-transaction.schema';
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
-import { WagerTransactionKind } from '@/src/modules/wagering/domain/wager-transaction-kind';
-import { WagerTransactionStatus } from '@/src/modules/wagering/domain/wager-transaction-status';
+import { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
+import { WagerTransactionKind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
+import { WagerTransactionStatus } from '@/src/modules/wagering/domain/value-objects/wager-transaction-status';
 import { FailureCode } from '@/src/modules/wagering/error/failure-code';
 import { Money } from '@/src/shared/domain/money';
 import { nul } from '@/src/shared/util/nul';

@@ -1,4 +1,4 @@
-import { ReferenceSchedule } from '@/src/modules/wagering/domain/wager-transaction';
+import { ReferenceSchedule } from '@/src/modules/wagering/domain/entities/wager-transaction';
 import { ExponentialBackoff } from '@/src/shared/domain/backoff';
 
 export interface ReferenceLookupConfig {

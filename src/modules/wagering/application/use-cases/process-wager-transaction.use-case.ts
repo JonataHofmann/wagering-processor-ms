@@ -1,6 +1,6 @@
 import type { InboxRepository } from '@/src/modules/messaging/application/ports/inbox.repository';
 import type { OutboxRepository } from '@/src/modules/messaging/application/ports/outbox.repository';
-import { InboxMessage } from '@/src/modules/messaging/domain/inbox-message';
+import { InboxMessage } from '@/src/modules/messaging/domain/entities/inbox-message';
 import { DuplicateWagerTransactionError } from '@/src/modules/wagering/error/wager-transaction.errors';
 import {
   DuplicateMessageError,
@@ -13,19 +13,19 @@ import type { IdGenerator } from '@/src/shared/application/ports/id-generator.po
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
 import { ResourceNotFoundError } from '@/src/shared/error/application-errors';
 
-import { computePayloadHash } from '@/src/modules/wagering/application/payload-hash';
+import { computePayloadHash } from '@/src/modules/wagering/application/use-cases/payload-hash';
 
-import type { WagerTransactionRepository } from './ports/wager-transaction.repository';
+import type { WagerTransactionRepository } from '@/src/modules/wagering/application/ports/wager-transaction.repository';
 
-import { ReferenceLookupPolicy } from '@/src/modules/wagering/application/reference-lookup.policy';
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
-import { WagerTransactionKind } from '@/src/modules/wagering/domain/wager-transaction-kind';
+import { ReferenceLookupPolicy } from '@/src/modules/wagering/application/use-cases/reference-lookup.policy';
+import { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
+import { WagerTransactionKind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
 import { Money, MoneyProps } from '@/src/shared/domain/money';
 import {
   toTransactionResult,
   type TransactionResult,
-} from './transaction-view';
-import type { WagerSettlement } from './wager-settlement';
+} from '@/src/modules/wagering/application/use-cases/transaction-view';
+import type { WagerSettlement } from '@/src/modules/wagering/application/use-cases/wager-settlement';
 
 export interface ProcessWagerTransactionCommand {
   idempotencyKey: string;

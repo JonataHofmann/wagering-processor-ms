@@ -3,7 +3,7 @@ import type { WagerTransactionRepository } from '@/src/modules/wagering/applicat
 import type {
   ResolutionOutcome,
   ResolvePendingReferenceUseCase,
-} from '@/src/modules/wagering/application/resolve-pending-reference.use-case';
+} from '@/src/modules/wagering/application/use-cases/resolve-pending-reference.use-case';
 import { runWithLogContext } from '@/src/platform/observability/log-context';
 import { faultPoint } from '@/src/platform/testing/fault-injection';
 import type { Clock } from '@/src/shared/application/ports/clock.port';

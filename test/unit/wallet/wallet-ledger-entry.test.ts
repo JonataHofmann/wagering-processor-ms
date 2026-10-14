@@ -1,4 +1,4 @@
-import { LedgerDirection } from '@/src/modules/wallet/domain/ledger-direction';
+import { LedgerDirection } from '@/src/modules/wallet/domain/value-objects/ledger-direction';
 import { Money } from '@/src/shared/domain/money';
 import { DomainError } from '@/src/shared/error/domain-error';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
@@ -6,7 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   type CreateLedgerEntryProps,
   WalletLedgerEntry,
-} from '../../../src/modules/wallet/domain/wallet-ledger-entry';
+} from '@/src/modules/wallet/domain/entities/wallet-ledger-entry';
 
 const brl = (amount: string): Money => Money.from({ amount, currency: 'BRL' });
 const usd = (amount: string): Money => Money.from({ amount, currency: 'USD' });

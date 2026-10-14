@@ -1,4 +1,4 @@
-import { LedgerDirection } from '@/src/modules/wallet/domain/ledger-direction';
+import { LedgerDirection } from '@/src/modules/wallet/domain/value-objects/ledger-direction';
 import { Money } from '@/src/shared/domain/money';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 

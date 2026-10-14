@@ -43,7 +43,7 @@ import {
 } from './application/ports/reconciliation.repository';
 import { ReconcileWalletsUseCase } from './application/use-cases/reconcile-wallets.use-case';
 import { LoggingReconciliationAlerts } from './infrastructure/reconciliation/logging-reconciliation-alerts';
-import { WalletsController } from '@/src/modules/wallet/presentation/wallets.controller';
+import { WalletsController } from '@/src/modules/wallet/presentation/controllers/wallets.controller';
 @Module({
   controllers: [WalletsController],
   providers: [

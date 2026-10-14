@@ -6,7 +6,7 @@ import {
 import { EntityManagerContext } from '@/src/infrastructure/persistence/entity-manager-context';
 import { LedgerEntryMapper } from '@/src/modules/wallet/infrastructure/mappers/wallet.mapper';
 import { LedgerEntrySchema } from '@/src/infrastructure/persistence/schemas/ledger-entry.schema';
-import { WalletLedgerEntry } from '@/src/modules/wallet/domain/wallet-ledger-entry';
+import { WalletLedgerEntry } from '@/src/modules/wallet/domain/entities/wallet-ledger-entry';
 
 export class MikroLedgerRepository implements LedgerRepository {
   constructor(private readonly context: EntityManagerContext) {}

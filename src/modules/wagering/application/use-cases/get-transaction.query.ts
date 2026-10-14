@@ -1,11 +1,11 @@
 import {
   TransactionView,
   toTransactionView,
-} from '@/src/modules/wagering/application/transaction-view';
+} from '@/src/modules/wagering/application/use-cases/transaction-view';
 
 import { ResourceNotFoundError } from '@/src/shared/error/application-errors';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
+import { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
 import { WagerTransactionRepository } from '@/src/modules/wagering/application/ports/wager-transaction.repository';
 
 export class GetTransactionQuery {

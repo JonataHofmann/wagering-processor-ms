@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { hostname } from 'node:os';
 
-import { OutboxRelay } from '@/src/modules/messaging/application/outbox-relay';
+import { OutboxRelay } from '@/src/modules/messaging/application/use-cases/outbox-relay';
 import { EventPublisher } from '@/src/modules/messaging/application/ports/event-publisher.port';
 import { OutboxRepository } from '@/src/modules/messaging/application/ports/outbox.repository';
 import { runWithLogContext } from '@/src/platform/observability/log-context';

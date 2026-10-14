@@ -2,8 +2,8 @@ import { InsufficientFundsError } from '@/src/modules/wallet/error/wallet.errors
 import { Money } from '@/src/shared/domain/money';
 import { CurrencyMismatchError } from '@/src/shared/error/currency-mismatch-error';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
-import { LedgerDirection } from './ledger-direction';
-import { WalletLedgerEntry } from './wallet-ledger-entry';
+import { LedgerDirection } from '@/src/modules/wallet/domain/value-objects/ledger-direction';
+import { WalletLedgerEntry } from '@/src/modules/wallet/domain/entities/wallet-ledger-entry';
 
 export interface OpenWalletProps {
   id: string;

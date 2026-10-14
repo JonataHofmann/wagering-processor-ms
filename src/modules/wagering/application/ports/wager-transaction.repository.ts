@@ -1,4 +1,4 @@
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
+import { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
 
 export interface WagerTransactionRepository {
   findById(id: string): Promise<WagerTransaction | undefined>;

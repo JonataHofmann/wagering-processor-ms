@@ -2,8 +2,8 @@ import { EventContext, IntegrationEvent } from "@/src/shared/domain/integration-
 import { TransactionSummary, summarize } from "@/src/modules/wagering/domain/events/transaction-summary";
 
 import { InvariantViolationError } from "@/src/shared/error/invariant-violation-error";
-import { WagerTransaction } from "@/src/modules/wagering/domain/wager-transaction";
-import { WagerTransactionStatus } from "@/src/modules/wagering/domain/wager-transaction-status";
+import { WagerTransaction } from "@/src/modules/wagering/domain/entities/wager-transaction";
+import { WagerTransactionStatus } from "@/src/modules/wagering/domain/value-objects/wager-transaction-status";
 
 export interface WagerTransactionPendingReferenceData extends TransactionSummary {
   attempts: number;

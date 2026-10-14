@@ -1,7 +1,7 @@
 import {
   InboxMessage,
   type ReceiveInboxProps,
-} from '@/src/modules/messaging/domain/inbox-message';
+} from '@/src/modules/messaging/domain/entities/inbox-message';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 import { describe, expect, test } from 'bun:test';
 

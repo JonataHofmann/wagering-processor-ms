@@ -1,4 +1,4 @@
-import { Wallet } from '@/src/modules/wallet/domain/wallet';
+import { Wallet } from '@/src/modules/wallet/domain/entities/wallet';
 
 export interface WalletRepository {
   findById(id: string): Promise<Wallet | undefined>;

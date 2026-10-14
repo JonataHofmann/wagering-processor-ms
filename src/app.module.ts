@@ -18,7 +18,7 @@ import {
   type ReferenceLookupConfig,
   referenceLookupConfigFromEnv,
   ReferenceLookupPolicy,
-} from './modules/wagering/application/reference-lookup.policy';
+} from '@/src/modules/wagering/application/use-cases/reference-lookup.policy';
 import {
   SCHEDULER_CONFIG,
   type SchedulerConfig,

@@ -1,7 +1,7 @@
 import {
   SYSTEM_PROVIDER_ID,
   WagerTransaction,
-} from '@/src/modules/wagering/domain/wager-transaction';
+} from '@/src/modules/wagering/domain/entities/wager-transaction';
 import {
   InvalidTransactionStateError,
   InvalidWagerTransactionError,
@@ -16,10 +16,10 @@ import {
 } from '@/test/support/wagering-builders';
 import { describe, expect, test } from 'bun:test';
 
-import { WagerTransactionKind as Kind } from '@/src/modules/wagering/domain/wager-transaction-kind';
-import { WagerTransactionStatus as Status } from '@/src/modules/wagering/domain/wager-transaction-status';
+import { WagerTransactionKind as Kind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
+import { WagerTransactionStatus as Status } from '@/src/modules/wagering/domain/value-objects/wager-transaction-status';
 import { FailureCode } from '@/src/modules/wagering/error/failure-code';
-import { LedgerDirection } from '@/src/modules/wallet/domain/ledger-direction';
+import { LedgerDirection } from '@/src/modules/wallet/domain/value-objects/ledger-direction';
 import { DomainError } from '@/src/shared/error/domain-error';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 

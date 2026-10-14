@@ -1,4 +1,4 @@
-import type { InboxMessage } from '../../domain/inbox-message';
+import type { InboxMessage } from '@/src/modules/messaging/domain/entities/inbox-message';
 
 export interface InboxRepository {
   tryRegister(message: InboxMessage): Promise<boolean>;

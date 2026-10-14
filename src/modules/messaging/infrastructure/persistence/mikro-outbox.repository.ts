@@ -5,8 +5,8 @@ import {
 
 import { EntityManagerContext } from '@/src/infrastructure/persistence/entity-manager-context';
 import { OutboxMessageSchema } from '@/src/infrastructure/persistence/schemas/outbox-message.schema';
-import { OutboxMessage } from '@/src/modules/messaging/domain/outbox-message';
-import { OutboxMessageMapper } from '@/src/modules/messaging/infrastructure/persistence/messaging.mapper';
+import { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
+import { OutboxMessageMapper } from '@/src/modules/messaging/infrastructure/mappers/messaging.mapper';
 
 /** Linha crua devolvida pelo SQL explícito (colunas em snake_case). */
 interface OutboxRow {

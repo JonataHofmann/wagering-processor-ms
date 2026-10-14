@@ -1,7 +1,7 @@
 import { FailureCode } from "@/src/modules/wagering/error/failure-code";
 import { MoneyProps } from "@/src/shared/domain/money";
-import { WagerTransaction } from "@/src/modules/wagering/domain/wager-transaction";
-import { WagerTransactionStatus } from "@/src/modules/wagering/domain/wager-transaction-status";
+import { WagerTransaction } from "@/src/modules/wagering/domain/entities/wager-transaction";
+import { WagerTransactionStatus } from "@/src/modules/wagering/domain/value-objects/wager-transaction-status";
 
 /** Resposta do POST /wagering/transactions (nova ou replay). */
 export interface TransactionResult {

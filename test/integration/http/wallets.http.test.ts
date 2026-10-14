@@ -1,5 +1,5 @@
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
-import { WagerTransactionKind } from '@/src/modules/wagering/domain/wager-transaction-kind';
+import { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
+import { WagerTransactionKind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
 import { Money } from '@/src/shared/domain/money';
 import { startTestApp, type TestApp } from '@/test/support/http-app';
 import {

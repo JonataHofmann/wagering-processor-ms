@@ -1,7 +1,7 @@
 import { InboxMessageRecord } from '@/src/infrastructure/persistence/schemas/inbox-message.schema';
 import { OutboxMessageRecord } from '@/src/infrastructure/persistence/schemas/outbox-message.schema';
-import { InboxMessage } from '@/src/modules/messaging/domain/inbox-message';
-import { OutboxMessage } from '@/src/modules/messaging/domain/outbox-message';
+import { InboxMessage } from '@/src/modules/messaging/domain/entities/inbox-message';
+import { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
 
 export const InboxMessageMapper = {
   toDomain(r: InboxMessageRecord): InboxMessage {

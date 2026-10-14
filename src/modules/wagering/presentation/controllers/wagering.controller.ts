@@ -1,11 +1,11 @@
-import { GetTransactionQuery } from '@/src/modules/wagering/application/get-transaction.query';
-import { ProcessWagerTransactionUseCase } from '@/src/modules/wagering/application/process-wager-transaction.use-case';
+import { GetTransactionQuery } from '@/src/modules/wagering/application/use-cases/get-transaction.query';
+import { ProcessWagerTransactionUseCase } from '@/src/modules/wagering/application/use-cases/process-wager-transaction.use-case';
 import {
   TransactionResult,
   TransactionView,
-} from '@/src/modules/wagering/application/transaction-view';
-import { WagerTransactionKind } from '@/src/modules/wagering/domain/wager-transaction-kind';
-import { WagerTransactionStatus } from '@/src/modules/wagering/domain/wager-transaction-status';
+} from '@/src/modules/wagering/application/use-cases/transaction-view';
+import { WagerTransactionKind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
+import { WagerTransactionStatus } from '@/src/modules/wagering/domain/value-objects/wager-transaction-status';
 import {
   RequestParser,
   parseUuidParam,

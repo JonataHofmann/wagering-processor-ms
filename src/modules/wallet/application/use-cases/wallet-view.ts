@@ -1,7 +1,7 @@
-import { LedgerDirection } from '../../domain/ledger-direction';
+import { LedgerDirection } from '@/src/modules/wallet/domain/value-objects/ledger-direction';
 import type { MoneyProps } from '../../../../shared/domain/money';
-import type { Wallet } from '../../domain/wallet';
-import type { WalletLedgerEntry } from '../../domain/wallet-ledger-entry';
+import type { Wallet } from '@/src/modules/wallet/domain/entities/wallet';
+import type { WalletLedgerEntry } from '@/src/modules/wallet/domain/entities/wallet-ledger-entry';
 
 /** Representação de saída da wallet: só JSON puro, dinheiro como MoneyProps. */
 export interface WalletView {

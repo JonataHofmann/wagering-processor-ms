@@ -1,7 +1,7 @@
 import { EntityManagerContext } from '@/src/infrastructure/persistence/entity-manager-context';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 import { LockMode } from '@mikro-orm/postgresql';
-import { Wallet } from '@/src/modules/wallet/domain/wallet';
+import { Wallet } from '@/src/modules/wallet/domain/entities/wallet';
 import { WalletAlreadyExistsError } from '@/src/modules/wallet/error/wallet.errors';
 import { WalletMapper } from '@/src/modules/wallet/infrastructure/mappers/wallet.mapper';
 import { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';

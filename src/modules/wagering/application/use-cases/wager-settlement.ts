@@ -3,20 +3,20 @@ import type {
   IntegrationEvent,
 } from '@/src/shared/domain/integration-event';
 
-import { OutboxMessage } from '@/src/modules/messaging/domain/outbox-message';
+import { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
 import { WagerTransactionProcessed } from '@/src/modules/wagering/domain/events/wager-transaction-processed.event';
 import { WagerTransactionRejected } from '@/src/modules/wagering/domain/events/wager-transaction-rejected.event';
 import { WalletBalanceChanged } from '@/src/modules/wagering/domain/events/wallet-balance-changed.event';
 import { evaluateReference } from '@/src/modules/wagering/domain/reference-policy';
-import type { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
-import { WagerTransactionStatus } from '@/src/modules/wagering/domain/wager-transaction-status';
+import type { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
+import { WagerTransactionStatus } from '@/src/modules/wagering/domain/value-objects/wager-transaction-status';
 import { FailureCode } from '@/src/modules/wagering/error/failure-code';
-import { LedgerDirection } from '@/src/modules/wallet/domain/ledger-direction';
-import type { Wallet } from '@/src/modules/wallet/domain/wallet';
-import type { WalletLedgerEntry } from '@/src/modules/wallet/domain/wallet-ledger-entry';
+import { LedgerDirection } from '@/src/modules/wallet/domain/value-objects/ledger-direction';
+import type { Wallet } from '@/src/modules/wallet/domain/entities/wallet';
+import type { WalletLedgerEntry } from '@/src/modules/wallet/domain/entities/wallet-ledger-entry';
 import type { IdGenerator } from '@/src/shared/application/ports/id-generator.port';
-import { WagerTransactionPendingReference } from '../domain/events/wager-transaction-pending-reference.event';
-import type { WagerTransactionRepository } from './ports/wager-transaction.repository';
+import { WagerTransactionPendingReference } from '@/src/modules/wagering/domain/events/wager-transaction-pending-reference.event';
+import type { WagerTransactionRepository } from '@/src/modules/wagering/application/ports/wager-transaction.repository';
 
 export interface EventCorrelation {
   correlationId: string;

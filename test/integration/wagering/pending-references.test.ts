@@ -2,7 +2,7 @@ import {
   WAGER_TRANSACTION_REPOSITORY,
   type WagerTransactionRepository,
 } from '@/src/modules/wagering/application/ports/wager-transaction.repository';
-import { ResolvePendingReferenceUseCase } from '@/src/modules/wagering/application/resolve-pending-reference.use-case';
+import { ResolvePendingReferenceUseCase } from '@/src/modules/wagering/application/use-cases/resolve-pending-reference.use-case';
 import {
   TRANSACTION_MANAGER,
   type TransactionManager,

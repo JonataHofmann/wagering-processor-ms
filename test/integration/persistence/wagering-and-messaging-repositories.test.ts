@@ -1,14 +1,14 @@
 import { Persistence, createPersistence } from '@/test/support/persistence';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
-import { InboxMessage } from '@/src/modules/messaging/domain/inbox-message';
-import { OutboxMessage } from '@/src/modules/messaging/domain/outbox-message';
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
-import { WagerTransactionKind as Kind } from '@/src/modules/wagering/domain/wager-transaction-kind';
-import { WagerTransactionStatus as Status } from '@/src/modules/wagering/domain/wager-transaction-status';
+import { InboxMessage } from '@/src/modules/messaging/domain/entities/inbox-message';
+import { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
+import { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
+import { WagerTransactionKind as Kind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
+import { WagerTransactionStatus as Status } from '@/src/modules/wagering/domain/value-objects/wager-transaction-status';
 import { FailureCode } from '@/src/modules/wagering/error/failure-code';
 import { DuplicateWagerTransactionError } from '@/src/modules/wagering/error/wager-transaction.errors';
-import { Wallet } from '@/src/modules/wallet/domain/wallet';
+import { Wallet } from '@/src/modules/wallet/domain/entities/wallet';
 import { IntegrationEvent } from '@/src/shared/domain/integration-event';
 import { Money } from '@/src/shared/domain/money';
 

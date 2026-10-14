@@ -1,4 +1,4 @@
-import { WalletLedgerEntry } from '@/src/modules/wallet/domain/wallet-ledger-entry';
+import { WalletLedgerEntry } from '@/src/modules/wallet/domain/entities/wallet-ledger-entry';
 
 export interface LedgerPageQuery {
   walletId: string;

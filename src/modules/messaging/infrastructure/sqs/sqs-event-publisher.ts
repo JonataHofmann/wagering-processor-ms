@@ -2,7 +2,7 @@ import {
   EventPublisher,
   PublishOutcome,
 } from '@/src/modules/messaging/application/ports/event-publisher.port';
-import { OutboxMessage } from '@/src/modules/messaging/domain/outbox-message';
+import { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
 import {
   GetQueueUrlCommand,
   SendMessageBatchCommand,

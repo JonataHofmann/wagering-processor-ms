@@ -2,9 +2,9 @@ import { EntityManagerContext } from '@/src/infrastructure/persistence/entity-ma
 import { isUniqueViolation } from '@/src/infrastructure/persistence/pg-error';
 import { WagerTransactionSchema } from '@/src/infrastructure/persistence/schemas/wager-transaction.schema';
 import { WagerTransactionRepository } from '@/src/modules/wagering/application/ports/wager-transaction.repository';
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
+import { WagerTransaction } from '@/src/modules/wagering/domain/entities/wager-transaction';
 import { DuplicateWagerTransactionError } from '@/src/modules/wagering/error/wager-transaction.errors';
-import { WagerTransactionMapper } from '@/src/modules/wagering/infrastructure/persistence/wager-transaction.mapper';
+import { WagerTransactionMapper } from '@/src/modules/wagering/infrastructure/mappers/wager-transaction.mapper';
 import { Clock } from '@/src/shared/application/ports/clock.port';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 

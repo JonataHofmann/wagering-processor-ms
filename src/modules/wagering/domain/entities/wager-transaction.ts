@@ -3,11 +3,11 @@ import {
   InvalidWagerTransactionError,
 } from '@/src/modules/wagering/error/wager-transaction.errors';
 
-import { WagerTransactionKind as Kind } from '@/src/modules/wagering/domain/wager-transaction-kind';
-import { WagerTransactionStatus as Status } from '@/src/modules/wagering/domain/wager-transaction-status';
+import { WagerTransactionKind as Kind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
+import { WagerTransactionStatus as Status } from '@/src/modules/wagering/domain/value-objects/wager-transaction-status';
 import { FailureCode } from '@/src/modules/wagering/error/failure-code';
-import { failureCodeInfo } from '@/src/modules/wagering/util/failure-code-info';
-import { LedgerDirection } from '@/src/modules/wallet/domain/ledger-direction';
+import { failureCodeInfo } from '@/src/modules/wagering/error/failure-code-info';
+import { LedgerDirection } from '@/src/modules/wallet/domain/value-objects/ledger-direction';
 import { Money } from '@/src/shared/domain/money';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 

@@ -2,7 +2,7 @@ import { Persistence, createPersistence } from '@/test/support/persistence';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { sqlStateOf } from '@/src/infrastructure/persistence/pg-error';
-import { Wallet } from '@/src/modules/wallet/domain/wallet';
+import { Wallet } from '@/src/modules/wallet/domain/entities/wallet';
 import { Money } from '@/src/shared/domain/money';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 
