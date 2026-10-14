@@ -6,6 +6,10 @@ import {
 } from '@/src/modules/wagering/application/use-cases/transaction-view';
 import { WagerTransactionKind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
 import { WagerTransactionStatus } from '@/src/modules/wagering/domain/value-objects/wager-transaction-status';
+import { ApiErrorResponseDto } from '@/src/platform/http/dto/api-error-response.dto';
+import { SubmitWagerTransactionRequestDto } from '@/src/modules/wagering/presentation/dto/submit-wager-transaction.request.dto';
+import { TransactionResultDto } from '@/src/modules/wagering/presentation/dto/transaction-result.response.dto';
+import { TransactionViewDto } from '@/src/modules/wagering/presentation/dto/transaction-view.response.dto';
 import {
   RequestParser,
   parseUuidParam,
@@ -23,6 +27,14 @@ import {
   Post,
   Res,
 } from '@nestjs/common';
+import {
+  ApiBody,
+  ApiHeader,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 /** Status HTTP de uma transação aceita para processamento (nova ou replay). */
 const STATUS_BY_RESULT: Readonly<Record<WagerTransactionStatus, number>> = {
   [WagerTransactionStatus.Processed]: 200,
@@ -38,6 +50,7 @@ interface StatusSettable {
   status(code: number): unknown;
 }
 
+@ApiTags('wagering')
 @Controller()
 export class WageringController {
   constructor(
@@ -46,6 +59,42 @@ export class WageringController {
   ) {}
 
   @Post('wagering/transactions')
+  @ApiOperation({
+    summary: 'Envia uma transação de aposta (BET/WIN/LOSS/REFUND/ROLLBACK)',
+    description:
+      'Idempotente por Idempotency-Key: reenviar a mesma chave devolve o mesmo resultado (idempotentReplay=true) sem reaplicar a operação.',
+  })
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: true,
+    description: 'Chave de idempotência da requisição (máx. 255 chars)',
+  })
+  @ApiBody({ type: SubmitWagerTransactionRequestDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Transação processada (PROCESSED) ou replay idempotente',
+    type: TransactionResultDto,
+  })
+  @ApiResponse({
+    status: 202,
+    description: 'Transação aceita, aguardando processamento (PENDING/PENDING_REFERENCE)',
+    type: TransactionResultDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Payload ou cabeçalho inválido',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 422,
+    description: 'Rejeitada por regra de negócio (ex.: saldo insuficiente)',
+    type: TransactionResultDto,
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Falha permanente de infraestrutura (FAILED)',
+    type: TransactionResultDto,
+  })
   async submit(
     @Body() body: unknown,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
@@ -98,6 +147,14 @@ export class WageringController {
   }
 
   @Get('wagering/transactions/:transactionId')
+  @ApiOperation({ summary: 'Consulta uma transação pelo id interno' })
+  @ApiParam({ name: 'transactionId', format: 'uuid' })
+  @ApiResponse({ status: 200, type: TransactionViewDto })
+  @ApiResponse({
+    status: 404,
+    description: 'Transação não encontrada',
+    type: ApiErrorResponseDto,
+  })
   async byId(
     @Param('transactionId') transactionId: string,
   ): Promise<TransactionView> {
@@ -107,6 +164,17 @@ export class WageringController {
   }
 
   @Get('providers/:providerId/wagering/transactions/:externalTransactionId')
+  @ApiOperation({
+    summary: 'Consulta uma transação pelo (providerId, externalTransactionId)',
+  })
+  @ApiParam({ name: 'providerId' })
+  @ApiParam({ name: 'externalTransactionId' })
+  @ApiResponse({ status: 200, type: TransactionViewDto })
+  @ApiResponse({
+    status: 404,
+    description: 'Transação não encontrada',
+    type: ApiErrorResponseDto,
+  })
   async byExternalId(
     @Param('providerId') providerId: string,
     @Param('externalTransactionId') externalTransactionId: string,

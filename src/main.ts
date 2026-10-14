@@ -5,6 +5,7 @@ import { referenceLookupConfigFromEnv } from '@/src/modules/wagering/application
 import { requireEnv } from '@/src/shared/util/require-env';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { parseAppRoles } from './config/app-roles';
 import { sqsConfigFromEnv } from './modules/messaging/infrastructure/sqs/sqs.config';
@@ -43,6 +44,19 @@ async function bootstrap(): Promise<void> {
     { bufferLogs: true, logger: createLogger() },
   );
   app.enableShutdownHooks();
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Wagering Processor API')
+    .setDescription(
+      'Processamento de transações de aposta (BET/WIN/LOSS/REFUND/ROLLBACK), wallets e ledger',
+    )
+    .setVersion('0.0.1')
+    .addTag('wagering')
+    .addTag('wallets')
+    .addTag('health')
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('docs', app, swaggerDocument);
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
