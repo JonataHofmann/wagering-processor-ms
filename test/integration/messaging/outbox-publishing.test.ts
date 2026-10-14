@@ -1,4 +1,3 @@
-import type { AppRole } from '@/src/config/app-roles';
 import { startTestApp, type TestApp } from '@/test/support/http-app';
 import { queryOnce } from '@/test/support/pg';
 import { createTestQueues, type TestQueues, waitFor } from '@/test/support/sqs';
@@ -21,11 +20,7 @@ describe('relay publicando no SQS', () => {
 
   beforeAll(async () => {
     queues = await createTestQueues();
-    t = await startTestApp({
-      roles: new Set<AppRole>(['api', 'relay']),
-      sqs: queues.config,
-      relay: FAST_RELAY,
-    });
+    t = await startTestApp({ sqs: queues.config, relay: FAST_RELAY });
   }, 30_000);
 
   afterAll(async () => {
@@ -81,31 +76,5 @@ describe('relay publicando no SQS', () => {
       [opening.body.eventId],
     );
     expect(opening.body).toEqual(stored!.payload);
-  });
-});
-
-describe('instância sem o papel relay', () => {
-  let queues: TestQueues;
-  let t: TestApp;
-
-  beforeAll(async () => {
-    queues = await createTestQueues();
-    t = await startTestApp({
-      roles: new Set<AppRole>(['api']),
-      sqs: queues.config,
-      relay: FAST_RELAY,
-    });
-  }, 30_000);
-
-  afterAll(async () => {
-    await t?.close();
-    await queues?.drop();
-  }, 30_000);
-
-  test('grava na outbox mas não publica', async () => {
-    await walletClient(t.request).openWallet('10.00');
-    await Bun.sleep(1_000);
-    expect(await pendingCount(t)).toBe(2); // WagerTransactionProcessed + WalletBalanceChanged da abertura
-    expect(await queues.drainEvents()).toHaveLength(0);
   });
 });

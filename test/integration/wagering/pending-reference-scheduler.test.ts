@@ -1,4 +1,3 @@
-import type { AppRole } from '@/src/config/app-roles';
 import { startTestApp, type TestApp } from '@/test/support/http-app';
 import { walletsInconsistentWithLedger } from '@/test/support/invariants';
 import { queryOnce } from '@/test/support/pg';
@@ -16,7 +15,6 @@ let api: ReturnType<typeof walletClient>;
 beforeAll(async () => {
   queues = await createTestQueues();
   t = await startTestApp({
-    roles: new Set<AppRole>(['api', 'consumer', 'scheduler']),
     sqs: queues.config,
     referenceLookup: LOOKUP,
     scheduler: SCHEDULER,
@@ -154,43 +152,5 @@ describe('scheduler de pendências, ponta a ponta', () => {
       amount: '100.00',
       version: 1,
     });
-  });
-});
-
-describe('instância sem o papel scheduler', () => {
-  let apiOnly: TestApp;
-
-  beforeAll(async () => {
-    apiOnly = await startTestApp({
-      referenceLookup: LOOKUP,
-      scheduler: SCHEDULER,
-    });
-  }, 30_000);
-  afterAll(async () => {
-    await apiOnly?.close();
-  }, 30_000);
-
-  test('não resolve pendências', async () => {
-    const client = walletClient(apiOnly.request);
-    const { wallet } = await client.openWallet('100.00');
-    const betId = crypto.randomUUID();
-    const refund = await client.submit(wallet, {
-      kind: 'REFUND',
-      amount: '40.00',
-      reference: betId,
-    });
-    await client.submit(wallet, {
-      kind: 'BET',
-      amount: '40.00',
-      externalId: betId,
-    });
-
-    await Bun.sleep(1_000);
-    const [row] = await queryOnce<{ status: string }>(
-      apiOnly.db.appUrl,
-      `SELECT status FROM wager_transactions WHERE id = $1`,
-      [refund.body.transactionId],
-    );
-    expect(row!.status).toBe('PENDING_REFERENCE');
   });
 });

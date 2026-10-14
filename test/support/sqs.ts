@@ -216,7 +216,6 @@ export function consumerEnv(
   extra: Record<string, string> = {},
 ): Record<string, string> {
   return {
-    APP_ROLES: 'api,consumer',
     SQS_WAGER_QUEUE: queues.config.queues.wagerTransactions,
     SQS_WAGER_DLQ: queues.config.queues.wagerTransactionsDlq,
     SQS_WAIT_TIME_SECONDS: String(queues.config.consumer.waitTimeSeconds),
@@ -232,7 +231,6 @@ export function relayEnv(
   extra: Record<string, string> = {},
 ): Record<string, string> {
   return {
-    APP_ROLES: 'relay',
     SQS_EVENTS_QUEUE: queues.config.queues.walletEvents,
     OUTBOX_LEASE_MS: '2000', // lease curto: o teste não precisa esperar 30 s
     OUTBOX_IDLE_INTERVAL_MS: '100',
@@ -244,7 +242,6 @@ export function schedulerEnv(
   extra: Record<string, string> = {},
 ): Record<string, string> {
   return {
-    APP_ROLES: 'scheduler',
     SCHEDULER_LEASE_MS: '2000',
     SCHEDULER_IDLE_INTERVAL_MS: '100',
     PENDING_REFERENCE_BACKOFF_BASE_MS: '200',

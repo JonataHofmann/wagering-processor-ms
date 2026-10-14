@@ -1,4 +1,3 @@
-import type { AppRole } from '@/src/config/app-roles';
 import { METRICS, type Metrics } from '@/src/platform/observability/metrics';
 import { startTestApp, type TestApp } from '@/test/support/http-app';
 import { walletsInconsistentWithLedger } from '@/test/support/invariants';
@@ -19,10 +18,7 @@ let metrics: Metrics;
 
 beforeAll(async () => {
   queues = await createTestQueues({ maxReceiveCount: 3 });
-  t = await startTestApp({
-    roles: new Set<AppRole>(['api', 'consumer']),
-    sqs: queues.config,
-  });
+  t = await startTestApp({ sqs: queues.config });
   p = await connectPersistence(t.db);
   api = walletClient(t.request);
   metrics = t.app.get<Metrics>(METRICS);
@@ -239,29 +235,5 @@ describe('consumer SQS ponta a ponta', () => {
     );
     await queueDrained();
     expect(await api.balanceOf(w)).toEqual({ amount: '75.00', version: 2 });
-  });
-});
-
-describe('instância sem o papel consumer', () => {
-  let otherQueues: TestQueues;
-  let apiOnly: TestApp;
-
-  beforeAll(async () => {
-    otherQueues = await createTestQueues();
-    apiOnly = await startTestApp({
-      roles: new Set<AppRole>(['api']),
-      sqs: otherQueues.config,
-    });
-  }, 30_000);
-
-  afterAll(async () => {
-    await apiOnly?.close();
-    await otherQueues?.drop();
-  }, 30_000);
-
-  test('não consome a fila', async () => {
-    await otherQueues.send({ hello: 'world' }, { groupId: 'g' });
-    await Bun.sleep(2_000);
-    expect(await otherQueues.depth()).toBe(1);
   });
 });

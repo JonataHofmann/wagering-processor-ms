@@ -8,7 +8,6 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { parseAppRoles } from './config/app-roles';
 import { sqsConfigFromEnv } from './modules/messaging/infrastructure/sqs/sqs.config';
 import { schedulerConfigFromEnv } from './modules/wagering/infrastructure/scheduler/scheduler.config';
 import { createValidationPipe } from './platform/http/validation-pipe';
@@ -33,11 +32,9 @@ function createLogger() {
   return ALL_LEVELS.slice(0, ALL_LEVELS.indexOf(level) + 1);
 }
 async function bootstrap(): Promise<void> {
-  const roles = parseAppRoles(process.env.APP_ROLES);
   const app = await NestFactory.create(
     AppModule.register({
       databaseUrl: requireEnv('DATABASE_URL'),
-      roles,
       sqs: sqsConfigFromEnv(),
       relay: relayConfigFromEnv(),
       referenceLookup: referenceLookupConfigFromEnv(),
@@ -64,7 +61,7 @@ async function bootstrap(): Promise<void> {
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
-  logger.log({ event: 'app_started', port, roles: [...roles] });
+  logger.log({ event: 'app_started', port });
 }
 
 void bootstrap().catch((error: unknown) => {

@@ -25,8 +25,10 @@ export interface TestApp {
 
 export async function startTestApp(
   options: Omit<AppOptions, 'databaseUrl'> = {},
+  /** reaproveita um banco isolado já existente, em vez de criar um novo (e não o derruba no close()) */
+  existingDb?: IsolatedDatabase,
 ): Promise<TestApp> {
-  const db = await createIsolatedDatabase();
+  const db = existingDb ?? (await createIsolatedDatabase());
   const app = await NestFactory.create(
     AppModule.register({
       databaseUrl: db.appUrl,
@@ -58,7 +60,7 @@ export async function startTestApp(
     },
     async close() {
       await app.close();
-      await db.drop();
+      if (existingDb === undefined) await db.drop();
     },
   };
 }

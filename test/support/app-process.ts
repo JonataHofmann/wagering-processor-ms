@@ -88,10 +88,11 @@ export async function startAppProcess(
 
   // process.execPath: o mesmo binário do Bun que roda os testes (não depende do PATH)
   const child = Bun.spawn([process.execPath, 'src/main.ts'], {
-    // APP_ROLES=api por padrão: o .env pode ligar o consumer, e o teste não deve consumir a fila de desenvolvimento
+    // toda instância sempre consome/publica/agenda (sem papéis) — quem chama é
+    // responsável por isolar a fila via extraEnv quando isso importar (ver
+    // test/support/sqs.ts); sem isso, herda a config de fila do .env ambiente.
     env: {
       ...process.env,
-      APP_ROLES: 'api',
       MIKRO_ORM_DEBUG: 'false',
       ...extraEnv,
       DATABASE_URL: databaseUrl,

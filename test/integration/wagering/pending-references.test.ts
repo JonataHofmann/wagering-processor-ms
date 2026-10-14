@@ -27,7 +27,15 @@ let transactions: WagerTransactionRepository;
 let tm: TransactionManager;
 
 beforeAll(async () => {
-  t = await startTestApp({ referenceLookup: LOOKUP });
+  // este arquivo testa resolver/claimDuePendingReferences diretamente, nunca via
+  // o scheduler em si (isso é o pending-reference-scheduler.test.ts). Sem papéis,
+  // o scheduler desta app roda sozinho em segundo plano — idleIntervalMs enorme
+  // evita que ele dispute as mesmas pendências que os testes reservam manualmente
+  // (a 1ª rodada roda vazia no boot, antes de qualquer pendência existir).
+  t = await startTestApp({
+    referenceLookup: LOOKUP,
+    scheduler: { batchSize: 20, leaseMs: 10_000, idleIntervalMs: 3_600_000 },
+  });
   api = walletClient(t.request);
   resolver = t.app.get(ResolvePendingReferenceUseCase);
   transactions = t.app.get<WagerTransactionRepository>(

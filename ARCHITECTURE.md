@@ -51,8 +51,8 @@ Itens específicos ainda em aberto (não bloqueiam nenhuma garantia financeira o
 ```
 Provedores ──HTTP──▶ ┌──────────────────────────────────────────────┐
                      │  App NestJS (mesma imagem, N réplicas)       │
-SQS ──────────────▶  │  papéis via APP_ROLES:                       │
-                     │  api · consumer · relay · scheduler          │
+SQS ──────────────▶  │  toda réplica faz tudo: atende HTTP,         │
+                     │  consome, publica a outbox e agenda          │
                      │                                              │
                      │  Application (casos de uso)                  │
                      │  Domain (puro: Money, Wallet, Transaction)   │
@@ -77,11 +77,11 @@ SQS ──────────────▶  │  papéis via APP_ROLES:  
 
 **Contexto.** Saldo, ledger, transação, inbox e outbox precisam mudar atomicamente. O domínio tem um único bounded context transacional: a wallet.
 
-**Decisão.** Uma única imagem NestJS, em módulos (`wallet`, `wagering`, `messaging`, `shared`, `platform`). Cada réplica assume papéis via a variável `APP_ROLES` (`api`, `consumer`, `relay`, `scheduler`). Toda coordenação entre réplicas acontece no PostgreSQL.
+**Decisão.** Uma única imagem NestJS, em módulos (`wallet`, `wagering`, `messaging`, `shared`, `platform`). Toda réplica roda tudo ao mesmo tempo — atende HTTP, consome `wager-transactions.fifo`, publica a outbox e resolve `PENDING_REFERENCE` — sem configuração nem papel pra escolher. Toda coordenação entre réplicas acontece no PostgreSQL (`SKIP LOCKED`, lease, constraints).
 
-**Alternativa descartada.** Microsserviços separados para wallet e wagering exigiriam saga ou 2PC dentro de uma movimentação de saldo.
+**Alternativa descartada.** Microsserviços separados para wallet e wagering exigiriam saga ou 2PC dentro de uma movimentação de saldo. Também descartada: instâncias com papéis fixos via variável de ambiente — adicionava um eixo de configuração sem necessidade real, já que cada worker já sabe ficar inerte sozinho quando não tem o que fazer.
 
-**Consequências.** Atomicidade com uma transação local. Escala horizontal para wallets distintas; o limite passa a ser o PostgreSQL primário. Em produção, os papéis podem rodar em deployments separados sem mudança de código.
+**Consequências.** Atomicidade com uma transação local. Escala horizontal para wallets distintas; o limite passa a ser o PostgreSQL primário. Subir uma réplica a mais aumenta capacidade em todas as frentes de uma vez (HTTP, consumo, publicação, agendamento) — não há como escalar uma frente isoladamente sem separar deployments.
 
 ### ADR-002 — Arquitetura hexagonal com domínio puro
 
@@ -334,7 +334,7 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
 - Um banco esquecido por um teste interrompido (`Ctrl+C`) pode sobrar; a limpeza manual está
   documentada no README.
 
-**Teste de reinício (`restart-consistency.test.ts`).** Três instâncias com todos os papéis
+**Teste de reinício (`restart-consistency.test.ts`).** Três instâncias (toda instância faz tudo)
 recebem carga mista de 12 wallets (HTTP e fila, referências fora de ordem nos dois canais,
 mensagens entregues em duplicata) enquanto uma instância morre com SIGKILL, outra recebe
 SIGTERM e, por fim, todas morrem com SIGKILL e o serviço é reiniciado. O cliente HTTP reenvia
@@ -530,9 +530,9 @@ primário e, por wallet, o lock de linha (ADR-010).
   Um retry devolve as seguintes do mesmo grupo, preservando a ordem.
 - A DLQ recebe o corpo original e atributos `dlq-reason`, `dlq-detail`,
   `original-message-id` e `receive-count`. A redrive policy da fila é a rede de segurança.
-- Ativado só nas instâncias com o papel `consumer`. Para no `beforeApplicationShutdown`,
-  antes do pool do banco fechar: termina as mensagens em andamento (até 20 s) e devolve
-  as não iniciadas com visibilidade 0.
+- Ativado em toda instância que tem SQS configurado (sem configuração, fica inerte). Para no
+  `beforeApplicationShutdown`, antes do pool do banco fechar: termina as mensagens em
+  andamento (até 20 s) e devolve as não iniciadas com visibilidade 0.
 
 **Por que DomainError vai para a DLQ e não para o ack.** Na API, esses erros voltam ao
 provedor como 400/404/409. Na fila não há resposta: um ack descartaria a mensagem em
@@ -543,7 +543,7 @@ silêncio; a DLQ a preserva para investigação.
 - Handler (só banco): deduplicação, reentregas simultâneas, classificação, inbox desfeita
   junto com o efeito numa falha transitória.
 - Ponta a ponta (fila real, filas exclusivas por suíte): processamento, duplicata, rejeição,
-  ordem por grupo, DLQ imediata, retry com recuperação, instância sem o papel.
+  ordem por grupo, DLQ imediata, retry com recuperação, instância sem SQS configurado.
 - Resiliência (processos reais): SIGKILL entre o commit e o ack (ponto de injeção de falha
   determinístico via `FAULT_INJECTION`), SIGTERM com mensagem em andamento, esgotamento de
   tentativas.
@@ -563,7 +563,8 @@ SKIP LOCKED) RETURNING`, gravando um lease (`locked_until`, `locked_by`); (2) pu
   (ordem por wallet), `MessageDeduplicationId` = eventId, corpo = envelope gravado.
 - Falha de publicação: backoff de 1 s até 5 min, sem limite de tentativas (evento confirmado
   não pode ser perdido). Broker fora do ar: o lote inteiro entra no backoff.
-- Worker ativado pelo papel `relay`; para no `beforeApplicationShutdown`.
+- Worker ativado em toda instância que tem publicador configurado; para no
+  `beforeApplicationShutdown`.
 
 **Por que lease e não lock de transação durante a publicação.** Segurar uma transação aberta
 durante I/O de rede prenderia uma conexão do pool pelo tempo da chamada ao broker. O lease
@@ -586,7 +587,7 @@ deduplicar pelo eventId.
 - Lógica (banco real, publicador em memória): ordem, 4 relays e 200 eventos sem duplicata,
   lease, relay morto antes e depois de publicar, falha parcial, broker fora do ar.
 - Ponta a ponta (fila real): uma aposta vira eventos no `wallet-events.fifo`; corpo idêntico
-  ao gravado; instância sem o papel não publica.
+  ao gravado; instância sem publicador configurado não publica.
 - Resiliência (processos reais): o cenário do enunciado (commit confirmado, relay morto antes
   de publicar, outra instância assume e publica), relay morto depois de publicar
   (republicação segura) e 3 relays em processos separados sem perda.
@@ -609,7 +610,7 @@ deduplicar pelo eventId.
 - A resolução usa a mesma decisão da primeira tentativa (`WagerSettlement`): lock da wallet,
   releitura sob o lock (em transação separada da primeira leitura, para não ler o identity
   map), política de referência, saldo, movimento e eventos, na mesma transação SQL.
-- Scheduler ativado pelo papel `scheduler`: reserva lotes de pendências vencidas com
+- Scheduler ativado em toda instância, sempre: reserva lotes de pendências vencidas com
   `FOR UPDATE SKIP LOCKED`, usando o `next_attempt_at` como lease (10 s), e as resolve em
   paralelo. Pendências da mesma wallet ficam serializadas pelo lock da wallet.
 
@@ -628,7 +629,7 @@ desfecho depois.
   na resolução, expiração, cadeia, resoluções simultâneas (encontrou o bug do identity map,
   barrado pelo trigger `fn_wtx_guard`), reservas concorrentes.
 - Ponta a ponta: REFUND antes da BET pela API e ROLLBACK antes do WIN pela fila, resolvidos
-  sem chamada manual; expiração automática; instância sem o papel não resolve.
+  sem chamada manual; expiração automática.
 - Resiliência (processos reais): scheduler morto depois de reservar; 3 schedulers e 30
   pendências, cada uma resolvida exatamente uma vez.
 
@@ -694,7 +695,7 @@ executado como processo, com os exit codes.
 - **Health checks** (`src/platform/health/health.controller.ts`), separados como o enunciado
   exige: `/health/live` nunca consulta dependência (processo vivo); `/health/ready` checa
   Postgres (`MikroORM.isConnected()`) e SQS (`GetQueueUrlCommand`) em paralelo, 503 se
-  qualquer um falhar. Instância sem papel que use fila reporta SQS como `"skipped"`, não como
+  qualquer um falhar. Instância sem SQS configurado reporta SQS como `"skipped"`, não como
   falha — hoje toda instância real tem SQS configurado (`sqsConfigFromEnv()` sempre chamado em
   `main.ts`), então na prática `/health/ready` sempre checa os dois de verdade.
 

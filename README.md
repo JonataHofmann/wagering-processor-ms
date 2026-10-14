@@ -23,12 +23,11 @@ As decisões de arquitetura, alternativas e trade-offs estão em [ARCHITECTURE.m
 11. [Eventos publicados](#eventos-publicados)
 12. [Observabilidade](#observabilidade)
 13. [Regras de negócio](#regras-de-negócio)
-14. [Papéis da instância](#papéis-da-instância)
-15. [Testes](#testes)
-16. [Operação](#operação)
-17. [Estrutura do projeto](#estrutura-do-projeto)
-18. [Solução de problemas](#solução-de-problemas)
-19. [Limitações conhecidas](#limitações-conhecidas)
+14. [Testes](#testes)
+15. [Operação](#operação)
+16. [Estrutura do projeto](#estrutura-do-projeto)
+17. [Solução de problemas](#solução-de-problemas)
+18. [Limitações conhecidas](#limitações-conhecidas)
 
 ---
 
@@ -98,7 +97,7 @@ As decisões de arquitetura, alternativas e trade-offs estão em [ARCHITECTURE.m
 
 - **Monólito modular hexagonal**: módulos `wallet`, `wagering` e `messaging`, cada um com `domain`, `application` (casos de uso e portas) e `infrastructure` (adaptadores). O domínio não conhece Nest nem ORM.
 - **Um único caso de uso central** atende HTTP e SQS.
-- **Papéis por instância** (`APP_ROLES`): a mesma imagem roda como API, consumer, relay e/ou scheduler.
+- **Toda instância faz tudo**: a mesma imagem sempre atende HTTP, consome `wager-transactions.fifo`, publica a outbox e resolve `PENDING_REFERENCE` — sem configuração extra, sem papel nenhum pra escolher.
 
 ---
 
@@ -207,7 +206,6 @@ O Bun carrega o `.env` automaticamente. O `.env.example` traz todos os valores p
 | Variável                 | Padrão                         | Descrição                                                                       |
 | ------------------------ | ------------------------------ | ------------------------------------------------------------------------------- |
 | `PORT`                   | `3000`                         | Porta HTTP                                                                      |
-| `APP_ROLES`              | `api,consumer,relay,scheduler` | Papéis desta instância (ver [Papéis da instância](#papéis-da-instância))        |
 | `DATABASE_URL`           | —                              | Conexão de runtime, com o role `wagering_app` (sem `UPDATE`/`DELETE` no ledger) |
 | `DATABASE_MIGRATION_URL` | —                              | Conexão das migrations, com o role `wagering_owner`                             |
 | `MIKRO_ORM_DEBUG`        | `false`                        | `true` imprime cada query                                                       |
@@ -564,21 +562,6 @@ Se a referência ainda não existe (ou existe, mas ela própria está pendente),
 
 ---
 
-## Papéis da instância
-
-`APP_ROLES` define o que cada instância faz. A mesma imagem pode exercer qualquer combinação.
-
-| Papel       | Faz                                      |
-| ----------- | ---------------------------------------- |
-| `api`       | Atende HTTP                              |
-| `consumer`  | Consome `wager-transactions.fifo`        |
-| `relay`     | Publica a outbox em `wallet-events.fifo` |
-| `scheduler` | Resolve pendências de referência         |
-
-Todos os papéis são seguros com várias instâncias ao mesmo tempo. Um valor inválido (ex.: `consumr`) derruba o boot com erro claro. No SIGTERM, cada papel termina o trabalho em andamento antes de o pool do banco fechar.
-
----
-
 ## Testes
 
 Todos os testes de integração rodam contra **PostgreSQL e SQS reais** (LocalStack). Cada suíte usa um banco próprio, copiado de um template já migrado, e filas próprias, criadas e apagadas pela suíte: os testes nunca tocam o banco `wagering` nem as filas de desenvolvimento.
@@ -705,8 +688,7 @@ docker compose exec postgres psql -U wagering_owner -d postgres -Atc \
 ```
 src/
 ├── main.ts                      bootstrap: lê o ambiente e monta o AppModule
-├── app.module.ts                composição: papéis, persistência, mensageria, módulos
-├── config/app-roles.ts          APP_ROLES
+├── app.module.ts                composição: persistência, mensageria, auth, módulos
 ├── shared/                      Money, erros de domínio, backoff, hash canônico, portas (Clock, IdGenerator, TransactionManager)
 ├── modules/
 │   ├── wallet/                  Wallet, ledger, criação, consultas, reconciliação

@@ -3,6 +3,7 @@ import {
   createIsolatedDatabase,
   type IsolatedDatabase,
 } from '@/test/support/database';
+import { startTestApp, type TestApp } from '@/test/support/http-app';
 import { walletsInconsistentWithLedger } from '@/test/support/invariants';
 import { queryOnce } from '@/test/support/pg';
 import { schedulerEnv, waitFor } from '@/test/support/sqs';
@@ -17,24 +18,31 @@ import {
 } from 'bun:test';
 
 let db: IsolatedDatabase;
-let apiProcess: AppProcess; // só API: cria as pendências e as referências, não resolve nada
+// app EM PROCESSO: cria as pendências e as referências via HTTP, mas nunca as
+// resolve — sem gate natural tipo "SQS ausente" pro scheduler (ele sempre liga),
+// então o idleIntervalMs gigante o deixa inerte depois da 1ª rodada (vazia, no
+// boot, antes de qualquer pendência existir); quem resolve são os processos
+// "scheduler" reais que cada teste sobe abaixo.
+let apiApp: TestApp;
 let api: ReturnType<typeof walletClient>;
 const cleanup: Array<() => Promise<unknown>> = [];
 
 beforeAll(async () => {
   db = await createIsolatedDatabase();
-  // primeira tentativa só em 5 s: nenhuma pendência vence sozinha durante o teste;
-  // quem a torna vencida é o atalho, quando a referência chega
-  apiProcess = await startAppProcess(db.appUrl, {
-    PENDING_REFERENCE_BACKOFF_BASE_MS: '5000',
-  });
-  api = walletClient(apiProcess.request);
+  apiApp = await startTestApp(
+    {
+      referenceLookup: { backoffBaseMs: 5_000, backoffMaxMs: 60_000, ttlMs: 900_000 },
+      scheduler: { batchSize: 20, leaseMs: 10_000, idleIntervalMs: 3_600_000 },
+    },
+    db,
+  );
+  api = walletClient(apiApp.request);
 }, 60_000);
 
 afterAll(async () => {
   for (const step of cleanup.reverse()) await step().catch(() => undefined);
   if (db) expect(await walletsInconsistentWithLedger(db.appUrl)).toEqual([]);
-  await apiProcess?.stop();
+  await apiApp?.close();
   await db?.drop();
 }, 60_000);
 

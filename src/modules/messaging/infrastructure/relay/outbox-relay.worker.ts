@@ -1,4 +1,3 @@
-import { AppRole } from '@/src/config/app-roles';
 import { faultPoint } from '@/src/platform/testing/fault-injection';
 import type { Clock } from '@/src/shared/application/ports/clock.port';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
@@ -18,7 +17,8 @@ import type { Metrics } from '@/src/platform/observability/metrics';
 import type { RelayConfig } from './relay.config';
 
 /**
- * Roda o OutboxRelay em loop nas instâncias com o papel "relay".
+ * Roda o OutboxRelay em loop em toda instância — fica inerte se SQS não estiver
+ * configurado (sem publisher, não há pra onde publicar).
  * - lote cheio: próxima rodada imediata (há mais pendentes);
  * - lote vazio ou parcial: espera idleIntervalMs;
  * - erro (ex.: banco fora): espera com backoff e continua.
@@ -37,7 +37,6 @@ export class OutboxRelayWorker
   private wake: (() => void) | undefined;
 
   constructor(
-    private readonly roles: ReadonlySet<AppRole>,
     private readonly transactionManager: TransactionManager,
     private readonly outbox: OutboxRepository,
     private readonly publisher: EventPublisher | undefined,
@@ -47,9 +46,7 @@ export class OutboxRelayWorker
   ) {}
 
   onApplicationBootstrap(): void {
-    if (!this.roles.has('relay')) return;
-    if (this.publisher === undefined)
-      throw new Error('the "relay" role requires SQS configuration');
+    if (this.publisher === undefined) return;
 
     const owner = `${hostname()}:${process.pid}`;
     const relay = new OutboxRelay(

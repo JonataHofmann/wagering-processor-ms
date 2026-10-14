@@ -34,7 +34,6 @@ import {
   type InboxRepository,
 } from '../messaging/application/ports/inbox.repository';
 
-import { APP_ROLES, type AppRole } from '@/src/config/app-roles';
 import {
   SQS_CLIENT,
   SQS_CONFIG,
@@ -119,23 +118,14 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
     {
       provide: PendingReferenceScheduler,
       useFactory: (
-        roles: ReadonlySet<AppRole>,
         tm: TransactionManager,
         transactions: WagerTransactionRepository,
         resolver: ResolvePendingReferenceUseCase,
         clock: Clock,
         config: SchedulerConfig,
       ) =>
-        new PendingReferenceScheduler(
-          roles,
-          tm,
-          transactions,
-          resolver,
-          clock,
-          config,
-        ),
+        new PendingReferenceScheduler(tm, transactions, resolver, clock, config),
       inject: [
-        APP_ROLES,
         TRANSACTION_MANAGER,
         WAGER_TRANSACTION_REPOSITORY,
         ResolvePendingReferenceUseCase,
@@ -161,14 +151,12 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
     {
       provide: WagerTransactionsConsumer,
       useFactory: (
-        roles: ReadonlySet<AppRole>,
         handler: WagerMessageHandler,
         client: SQSClient | undefined,
         config: SqsConfig | undefined,
         metrics: Metrics,
-      ) => new WagerTransactionsConsumer(roles, handler, client, config, metrics),
+      ) => new WagerTransactionsConsumer(handler, client, config, metrics),
       inject: [
-        APP_ROLES,
         WagerMessageHandler,
         { token: SQS_CLIENT, optional: true },
         { token: SQS_CONFIG, optional: true },

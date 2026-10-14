@@ -4,6 +4,12 @@ import {
   createIsolatedDatabase,
 } from '@/test/support/database';
 import {
+  consumerEnv,
+  createTestQueues,
+  relayEnv,
+  type TestQueues,
+} from '@/test/support/sqs';
+import {
   Operation,
   RequestFn,
   SubmitResult,
@@ -19,13 +25,18 @@ const INSTANCES = 3;
 const ITERATIONS = Number(process.env.CONCURRENCY_ITERATIONS ?? 10);
 
 let db: IsolatedDatabase;
+let queues: TestQueues;
 let apps: AppProcess[] = [];
 let api: ReturnType<typeof walletClient>;
 
 beforeAll(async () => {
   db = await createIsolatedDatabase();
+  // sem papéis, toda instância sempre consome/publica — isola a fila aqui pra
+  // essas 3 instâncias (este teste é só de HTTP) não tocarem a fila real de dev.
+  queues = await createTestQueues();
+  const env = { ...consumerEnv(queues), ...relayEnv(queues) };
   apps = await Promise.all(
-    Array.from({ length: INSTANCES }, () => startAppProcess(db.appUrl)),
+    Array.from({ length: INSTANCES }, () => startAppProcess(db.appUrl, env)),
   );
   api = walletClient(apps[0]!.request);
 }, 60_000);
@@ -34,6 +45,7 @@ afterAll(async () => {
   if (db) expect(await walletsInconsistentWithLedger(db.appUrl)).toEqual([]);
   await Promise.all(apps.map((app) => app.stop()));
   await db?.drop();
+  await queues?.drop();
 }, 60_000);
 
 /** Distribui as requisições em rodízio entre as instâncias. */

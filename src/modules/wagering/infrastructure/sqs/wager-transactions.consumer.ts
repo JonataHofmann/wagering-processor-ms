@@ -3,7 +3,6 @@ import type {
   OnApplicationBootstrap,
 } from '@nestjs/common';
 
-import { AppRole } from '@/src/config/app-roles';
 import { SqsPollingConsumer } from '@/src/modules/messaging/infrastructure/sqs/sqs-polling-consumer';
 import { SqsConfig } from '@/src/modules/messaging/infrastructure/sqs/sqs.config';
 import { WagerMessageHandler } from '@/src/modules/wagering/infrastructure/sqs/wager-message.handler';
@@ -12,7 +11,8 @@ import { faultPoint } from '@/src/platform/testing/fault-injection';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 
 /**
- * Liga a fila wager-transactions.fifo ao WagerMessageHandler, só nas instâncias com o papel "consumer".
+ * Liga a fila wager-transactions.fifo ao WagerMessageHandler, em toda instância —
+ * fica inerte se SQS não estiver configurado (client/config ausentes).
  * Para no beforeApplicationShutdown: antes de o pool do banco ser fechado (onApplicationShutdown).
  */
 export class WagerTransactionsConsumer
@@ -21,7 +21,6 @@ export class WagerTransactionsConsumer
   private consumer: SqsPollingConsumer | undefined;
 
   constructor(
-    private readonly roles: ReadonlySet<AppRole>,
     private readonly handler: WagerMessageHandler,
     private readonly client: SQSClient | undefined,
     private readonly config: SqsConfig | undefined,
@@ -29,10 +28,7 @@ export class WagerTransactionsConsumer
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-    if (!this.roles.has('consumer')) return;
-    if (this.client === undefined || this.config === undefined) {
-      throw new Error('the "consumer" role requires SQS configuration');
-    }
+    if (this.client === undefined || this.config === undefined) return;
     this.consumer = new SqsPollingConsumer(this.client, {
       name: 'wager-transactions',
       queueName: this.config.queues.wagerTransactions,

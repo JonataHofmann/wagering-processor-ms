@@ -49,7 +49,6 @@ beforeAll(async () => {
     ...consumerEnv(queues),
     ...relayEnv(queues),
     ...schedulerEnv(),
-    APP_ROLES: 'api,consumer,relay,scheduler',
     SQS_MAX_RECEIVE_COUNT: '10',
   });
   await cluster.start(3);

@@ -9,7 +9,6 @@ import {
   Module,
 } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
-import { APP_ROLES, type AppRole } from './config/app-roles';
 import { PersistenceModule } from './infrastructure/persistence/persistence.module';
 import type { SqsConfig } from './modules/messaging/infrastructure/sqs/sqs.config';
 import { MessagingModule } from './modules/messaging/messaging.module';
@@ -38,9 +37,7 @@ import { MetricsController } from './platform/observability/metrics.controller';
 export interface AppOptions {
   databaseUrl: string;
   debug?: boolean;
-  /** papéis desta instância; padrão: só "api" */
-  roles?: ReadonlySet<AppRole>;
-  /** obrigatório quando a instância tem papéis que usam fila */
+  /** ausente = consumer/relay ficam inertes (nada pra consumir/publicar); scheduler roda sempre */
   sqs?: SqsConfig;
   /** configuração do relay da outbox; padrão: lote 10, lease 30 s, intervalo 500 ms */
   relay?: RelayConfig;
@@ -53,14 +50,12 @@ export interface AppOptions {
 @Module({})
 class AppConfigModule {
   static forRoot(
-    roles: ReadonlySet<AppRole>,
     referenceLookup: ReferenceLookupConfig,
     scheduler: SchedulerConfig,
   ): DynamicModule {
     return {
       module: AppConfigModule,
       providers: [
-        { provide: APP_ROLES, useValue: roles },
         {
           provide: REFERENCE_LOOKUP_POLICY,
           useValue: new ReferenceLookupPolicy(referenceLookup),
@@ -68,7 +63,7 @@ class AppConfigModule {
         { provide: SCHEDULER_CONFIG, useValue: scheduler },
         { provide: METRICS, useValue: new InMemoryMetrics() },
       ],
-      exports: [APP_ROLES, REFERENCE_LOOKUP_POLICY, SCHEDULER_CONFIG, METRICS],
+      exports: [REFERENCE_LOOKUP_POLICY, SCHEDULER_CONFIG, METRICS],
     };
   }
 }
@@ -84,7 +79,6 @@ export class AppModule {
       module: AppModule,
       imports: [
         AppConfigModule.forRoot(
-          options.roles ?? new Set<AppRole>(['api']),
           options.referenceLookup ?? referenceLookupConfigFromEnv({}),
           options.scheduler ?? schedulerConfigFromEnv({}),
         ),

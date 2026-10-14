@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 
 import { AppModule } from '../src/app.module';
-import type { AppRole } from '../src/config/app-roles';
 /**
  * Reconcilia TODAS as wallets: saldo gravado × saldo reconstruído pelo ledger.
  * Somente leitura. Uso: bun run reconcile
@@ -17,9 +16,11 @@ async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required');
 
-  // nenhum papel: sem HTTP, sem consumer, sem relay, sem scheduler; só os casos de uso
+  // createApplicationContext: sem HTTP. Sem `sqs`, consumer/relay ficam inertes
+  // (nada pra consumir/publicar); o scheduler roda mesmo assim, mas é inofensivo
+  // aqui — não encontra nada pendente e para sozinho no app.close() abaixo.
   const app = await NestFactory.createApplicationContext(
-    AppModule.register({ databaseUrl, roles: new Set<AppRole>() }),
+    AppModule.register({ databaseUrl }),
     { logger: ['error', 'warn'] },
   );
 

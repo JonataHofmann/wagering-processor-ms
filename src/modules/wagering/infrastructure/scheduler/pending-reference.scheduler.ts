@@ -1,4 +1,3 @@
-import type { AppRole } from '@/src/config/app-roles';
 import type { WagerTransactionRepository } from '@/src/modules/wagering/application/ports/wager-transaction.repository';
 import type {
   ResolutionOutcome,
@@ -17,7 +16,7 @@ import {
 import type { SchedulerConfig } from './scheduler.config';
 
 /**
- * Reprocessa pendências de referência vencidas, nas instâncias com o papel "scheduler".
+ * Reprocessa pendências de referência vencidas. Roda em toda instância.
  * Cada rodada: reserva um lote (SKIP LOCKED + lease) e resolve cada pendência em paralelo.
  * Pendências da mesma wallet ficam serializadas pelo lock da wallet dentro do caso de uso.
  * Se uma resolução falhar (ou o processo morrer), a reserva vence e outra rodada tenta de novo.
@@ -35,7 +34,6 @@ export class PendingReferenceScheduler
   private wake: (() => void) | undefined;
 
   constructor(
-    private readonly roles: ReadonlySet<AppRole>,
     private readonly transactionManager: TransactionManager,
     private readonly transactions: WagerTransactionRepository,
     private readonly resolver: ResolvePendingReferenceUseCase,
@@ -44,7 +42,6 @@ export class PendingReferenceScheduler
   ) {}
 
   onApplicationBootstrap(): void {
-    if (!this.roles.has('scheduler')) return;
     this.loop = this.run();
     this.logger.log('resolving pending references');
   }

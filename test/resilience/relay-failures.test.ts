@@ -1,8 +1,9 @@
-import { type AppProcess, startAppProcess } from '@/test/support/app-process';
+import { startAppProcess } from '@/test/support/app-process';
 import {
   createIsolatedDatabase,
   type IsolatedDatabase,
 } from '@/test/support/database';
+import { startTestApp, type TestApp } from '@/test/support/http-app';
 import { queryOnce } from '@/test/support/pg';
 import {
   createTestQueues,
@@ -21,19 +22,22 @@ import {
 } from 'bun:test';
 
 let db: IsolatedDatabase;
-let apiProcess: AppProcess; // só API: gera eventos na outbox, não publica
+// app EM PROCESSO (não um `bun src/main.ts` real): sem `sqs:`, relay/consumer
+// ficam inertes sozinhos — só gera eventos na outbox via HTTP, nunca os publica,
+// nunca disputa com os processos "relay" reais que cada teste sobe abaixo.
+let apiApp: TestApp;
 let api: ReturnType<typeof walletClient>;
 const cleanup: Array<() => Promise<unknown>> = [];
 
 beforeAll(async () => {
   db = await createIsolatedDatabase();
-  apiProcess = await startAppProcess(db.appUrl);
-  api = walletClient(apiProcess.request);
+  apiApp = await startTestApp({}, db);
+  api = walletClient(apiApp.request);
 }, 60_000);
 
 afterAll(async () => {
   for (const step of cleanup.reverse()) await step().catch(() => undefined);
-  await apiProcess?.stop();
+  await apiApp?.close();
   await db?.drop();
 }, 60_000);
 

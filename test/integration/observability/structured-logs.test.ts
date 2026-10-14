@@ -73,7 +73,6 @@ describe('logs estruturados', () => {
       }
       expect(find((l) => l.event === 'app_started')).toMatchObject({
         context: 'Bootstrap',
-        roles: ['api', 'consumer'],
       });
     });
   });
