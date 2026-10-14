@@ -21,13 +21,14 @@ As decisões de arquitetura, alternativas e trade-offs estão em [ARCHITECTURE.m
 9. [API HTTP](#api-http)
 10. [Entrada pela fila SQS](#entrada-pela-fila-sqs)
 11. [Eventos publicados](#eventos-publicados)
-12. [Regras de negócio](#regras-de-negócio)
-13. [Papéis da instância](#papéis-da-instância)
-14. [Testes](#testes)
-15. [Operação](#operação)
-16. [Estrutura do projeto](#estrutura-do-projeto)
-17. [Solução de problemas](#solução-de-problemas)
-18. [Limitações conhecidas](#limitações-conhecidas)
+12. [Observabilidade](#observabilidade)
+13. [Regras de negócio](#regras-de-negócio)
+14. [Papéis da instância](#papéis-da-instância)
+15. [Testes](#testes)
+16. [Operação](#operação)
+17. [Estrutura do projeto](#estrutura-do-projeto)
+18. [Solução de problemas](#solução-de-problemas)
+19. [Limitações conhecidas](#limitações-conhecidas)
 
 ---
 
@@ -45,7 +46,7 @@ As decisões de arquitetura, alternativas e trade-offs estão em [ARCHITECTURE.m
 | Reconciliação saldo × ledger (endpoint e comando)                        | ✓                                                                     |
 | Testes de resiliência com processos reais (SIGKILL, SIGTERM)             | ✓                                                                     |
 | Teste de reinício sob carga com prova de consistência final              | ✓                                                                     |
-| Observabilidade: logs JSON, `/metrics` (Prometheus), `/health/ready`     | Em andamento (métricas já contadas em memória; `/health/live` e `/health/ready` prontos) |
+| Observabilidade: logs JSON, `/metrics` (Prometheus), `/health/ready`     | ✓                                                                     |
 | Autenticação de provedores                                               | Estrutura pronta via `ProviderIdentityPort`/`AuthModule` (ADR-008); adapter é no-op, integração real com Keycloak pendente |
 
 ---
@@ -271,6 +272,7 @@ O Bun carrega o `.env` automaticamente. O `.env.example` traz todos os valores p
 | `GET /providers/:providerId/wagering/transactions/:externalTransactionId` | Consulta pelo id do provedor                                    | 200             |
 | `GET /health/live`                                                        | Liveness (não consulta dependências)                            | 200             |
 | `GET /health/ready`                                                       | Readiness: PostgreSQL e SQS alcançáveis                         | 200 / 503       |
+| `GET /metrics`                                                            | Métricas em formato Prometheus (ver [Observabilidade](#observabilidade)) | 200             |
 
 Headers opcionais: `X-Correlation-Id` é propagado para os eventos gerados pela requisição.
 
@@ -494,6 +496,30 @@ Envelope:
 | `eventType`, `eventVersion` | atributos de mensagem, para filtrar sem abrir o corpo |
 
 **Para quem consome:** a entrega é **at-least-once**. Deduplique pelo `eventId`, e use `walletVersion` para ordenar e descartar eventos obsoletos da mesma wallet.
+
+---
+
+## Observabilidade
+
+Logs JSON estruturados (`correlationId`, `requestId`, `messageId`, `transactionId`, `walletId`,
+`providerId` — nunca payload financeiro completo), health checks separados e métricas Prometheus
+em `GET /metrics` (texto plano, sem autenticação). Detalhes de desenho em
+[ARCHITECTURE.md](ARCHITECTURE.md) (ADR-017).
+
+```sh
+curl -s localhost:3000/metrics
+```
+
+| Métrica | Tipo | O que mede |
+| --- | --- | --- |
+| `wagering_transactions_total{status}` | counter | Transações processadas, por status final |
+| `wagering_duplicates_detected_total{source}` | counter | Replay por `Idempotency-Key` (`idempotency_key`) ou reentrega já vista na inbox (`inbox_message`) |
+| `sqs_message_retries_total` | counter | Mensagens devolvidas à fila com backoff |
+| `sqs_dead_letter_messages_total{reason}` | counter | Mensagens mandadas pra DLQ, por motivo |
+| `database_lock_conflicts_total{sql_state}` | counter | `lock_timeout`/deadlock na wallet (HTTP e SQS) |
+| `outbox_publish_lag_seconds` | gauge | Atraso entre o evento acontecer e ser publicado |
+| `http_request_duration_seconds{method,route,status}` | histogram | Latência de toda a API HTTP |
+| `sqs_message_processing_duration_seconds{queue}` | histogram | Latência de processamento de cada mensagem |
 
 ---
 
@@ -735,7 +761,6 @@ Cada módulo segue a mesma divisão: `domain` (regras puras, sem framework), `ap
 - **Ordem dos eventos entre relays.** Relays diferentes podem publicar eventos da mesma wallet fora de ordem. Os eventos carregam `walletVersion` para o consumidor ordenar.
 - **Entrega at-least-once.** Um relay que morre entre publicar e marcar republica o evento com o mesmo `eventId`. A deduplicação do SQS FIFO (5 minutos) costuma descartar a cópia; consumidores devem deduplicar pelo `eventId` de qualquer forma.
 - **Relógio das instâncias.** Leases de relay e scheduler usam o relógio de cada instância. Diferenças maiores que o lease (10 a 30 s) poderiam gerar trabalho duplicado, que é tolerado (idempotência e inbox).
-- **Observabilidade ainda parcial.** As métricas já são contadas, mas ainda não expostas em `/metrics`.
 - **Sem autenticação real.** A estrutura (`ProviderIdentityPort`, `ProviderAuthGuard`, `CurrentProvider`, `AuthModule`) está pronta e documentada (ADR-008 no `ARCHITECTURE.md`), mas o adapter ligado hoje (`AUTH_MODE=noop`) é fictício e nenhum controller usa o Guard ainda — o `providerId` do corpo continua não verificado contra a identidade de quem chama.
 - **Ajustes de saldo.** Não existe um caso de uso de ajuste manual auditável; a reconciliação detecta divergências, e a correção é um procedimento operacional.
 

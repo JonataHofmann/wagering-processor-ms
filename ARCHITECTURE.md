@@ -27,7 +27,6 @@ A correção financeira é garantida pelo **PostgreSQL**, não pelo broker nem p
 
 Itens específicos ainda em aberto (não bloqueiam nenhuma garantia financeira ou de concorrência):
 
-- **`GET /metrics` em formato Prometheus.** As métricas já são contadas em memória (`InMemoryMetrics`) e a reconciliação já emite as suas; falta expor via HTTP e instrumentar o restante da lista da seção 12 do enunciado (transações por status, duplicatas, retries, DLQ, conflitos de lock, outbox lag, latência).
 - **Teste de carga (`bun run test:load`).** Diferencial opcional, não implementado.
 
 ---
@@ -663,6 +662,56 @@ um lançamento de ajuste auditável, nunca com um UPDATE no saldo.
 alterado, lançamento apagado do meio, versão adiantada), varredura em páginas pequenas,
 reconciliação contínua durante 60 apostas concorrentes sem falsa divergência, e o comando
 executado como processo, com os exit codes.
+
+### ADR-017 — Observabilidade: logs estruturados, métricas Prometheus e health checks
+
+**Status:** Aceito
+
+**Decisão.**
+
+- **Logs** (`src/platform/observability/json-logger.ts`, `log-context.ts`): JSON estruturado,
+  `correlationId`/`requestId`/`messageId`/`transactionId`/`walletId`/`providerId` propagados
+  via `AsyncLocalStorage` (`runWithLogContext`/`enrichLogContext`) — nunca precisam ser
+  passados manualmente adiante numa cadeia de chamadas. Nunca logam payload financeiro
+  completo (só ids e metadados).
+- **Métricas** (`src/platform/observability/metrics.ts`): registro em memória com os três
+  tipos Prometheus — counter (`increment`), gauge (`set`) e histograma de verdade (`observe`,
+  buckets cumulativos default do cliente Prometheus: 5ms .. 10s). Exposto em `GET /metrics`
+  (`metrics.controller.ts` + `prometheus-format.ts`, texto plano, sem autenticação — igual
+  `/health`), sem biblioteca externa.
+  - `wagering_transactions_total{status}`, `wagering_duplicates_detected_total{source}` —
+    `ProcessWagerTransactionUseCase.execute()` (idempotência) e `WagerMessageHandler.classify()`
+    (redelivery de inbox).
+  - `sqs_message_retries_total`, `sqs_dead_letter_messages_total{reason}`,
+    `sqs_message_processing_duration_seconds` — `SqsPollingConsumer` (genérico, não específico
+    de wagering).
+  - `database_lock_conflicts_total{sql_state}` — `isLockConflict()` novo em `pg-error.ts`
+    (subset de `isTransientDatabaseError`: só `lock_timeout`/`deadlock`), checado no
+    `ErrorMappingFilter` (HTTP) e no `WagerMessageHandler` (SQS).
+  - `outbox_publish_lag_seconds` — `OutboxRelay.relayOnce()`, maior lag do lote publicado.
+  - `http_request_duration_seconds{method,route,status}` — `HttpMetricsInterceptor`, via
+    `APP_INTERCEPTOR` global: cobre toda a API de uma vez, sem instrumentar cada controller.
+- **Health checks** (`src/platform/health/health.controller.ts`), separados como o enunciado
+  exige: `/health/live` nunca consulta dependência (processo vivo); `/health/ready` checa
+  Postgres (`MikroORM.isConnected()`) e SQS (`GetQueueUrlCommand`) em paralelo, 503 se
+  qualquer um falhar. Instância sem papel que use fila reporta SQS como `"skipped"`, não como
+  falha — hoje toda instância real tem SQS configurado (`sqsConfigFromEnv()` sempre chamado em
+  `main.ts`), então na prática `/health/ready` sempre checa os dois de verdade.
+
+**Cobertura de teste por métrica.** Todas as 8 métricas têm o próprio valor afirmado por teste,
+não só o comportamento que elas medem:
+`test/integration/observability/metrics.test.ts` cobre o formato (`# TYPE`, buckets cumulativos
+até `+Inf`, `_sum`, `_count`) e `wagering_transactions_total`,
+`wagering_duplicates_detected_total{source=idempotency_key}` e `http_request_duration_seconds`
+depois de tráfego real; `wager-message-handler.test.ts` cobre
+`wagering_duplicates_detected_total{source=inbox_message}` e `database_lock_conflicts_total`
+(lock_timeout real); `sqs-consumer.test.ts` cobre `sqs_message_retries_total`,
+`sqs_dead_letter_messages_total` e `sqs_message_processing_duration_seconds` através do loop
+real do `SqsPollingConsumer` (LocalStack); `outbox-relay.test.ts` cobre
+`outbox_publish_lag_seconds`.
+
+**Consequências.** `/metrics` e `/health/*` ficam sempre abertos (sem guard), como o enunciado
+exige. OpenTelemetry e dashboard seguem opcionais, não implementados.
 
 ## 6. Domínio e componentes compartilhados
 
