@@ -1,11 +1,11 @@
 import {
-  CanonicalizationError,
   canonicalHash,
   canonicalize,
   sha256Hex,
 } from '@/src/shared/util/canonical-hash';
 import { describe, expect, test } from 'bun:test';
 
+import { CanonicalizationError } from '@/src/shared/error/canonicalization-error';
 import { Money } from '@/src/shared/domain/money';
 
 const BET_PAYLOAD = {
