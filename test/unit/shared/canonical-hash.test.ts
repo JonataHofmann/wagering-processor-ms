@@ -3,7 +3,7 @@ import {
   canonicalHash,
   canonicalize,
   sha256Hex,
-} from '@/src/shared/application/canonical-hash';
+} from '@/src/shared/util/canonical-hash';
 import { describe, expect, test } from 'bun:test';
 
 import { Money } from '@/src/shared/domain/money';

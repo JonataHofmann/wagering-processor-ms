@@ -1,4 +1,4 @@
-import { RequestValidationError } from '@/src/shared/application/application-errors';
+import { RequestValidationError } from '@/src/shared/error/application-errors';
 
 /**
  * Cursor opaco da paginação do ledger: base64url de {"v": walletVersion}.

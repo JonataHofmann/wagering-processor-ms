@@ -1,7 +1,7 @@
 import {
   type FieldViolation,
   RequestValidationError,
-} from '@/src/shared/application/application-errors';
+} from '@/src/shared/error/application-errors';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

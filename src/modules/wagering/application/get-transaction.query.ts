@@ -3,10 +3,10 @@ import {
   toTransactionView,
 } from '@/src/modules/wagering/application/transaction-view';
 
-import { WagerTransactionRepository } from '@/src/modules/wagering/application/ports/wager-transaction.repository';
-import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
-import { ResourceNotFoundError } from '@/src/shared/application/application-errors';
+import { ResourceNotFoundError } from '@/src/shared/error/application-errors';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
+import { WagerTransaction } from '@/src/modules/wagering/domain/wager-transaction';
+import { WagerTransactionRepository } from '@/src/modules/wagering/application/ports/wager-transaction.repository';
 
 export class GetTransactionQuery {
   constructor(

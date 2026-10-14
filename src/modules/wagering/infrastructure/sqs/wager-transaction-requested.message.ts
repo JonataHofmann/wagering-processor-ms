@@ -1,12 +1,12 @@
 import {
   CanonicalValue,
   canonicalHash,
-} from '@/src/shared/application/canonical-hash';
+} from '@/src/shared/util/canonical-hash';
 
 import { ProcessWagerTransactionCommand } from '@/src/modules/wagering/application/process-wager-transaction.use-case';
-import { WagerTransactionKind } from '@/src/modules/wagering/domain/wager-transaction-kind';
 import { RequestParser } from '@/src/platform/http/request-parsing';
-import { RequestValidationError } from '@/src/shared/application/application-errors';
+import { RequestValidationError } from '@/src/shared/error/application-errors';
+import { WagerTransactionKind } from '@/src/modules/wagering/domain/wager-transaction-kind';
 
 export const WAGER_TRANSACTION_REQUESTED = 'WagerTransactionRequested';
 const KINDS = Object.values(WagerTransactionKind);

@@ -1,4 +1,4 @@
-import type { WalletReconciliation } from '../reconcile-wallets.use-case';
+import type { WalletReconciliation } from '../use-cases/reconcile-wallets.use-case';
 
 /** Para onde vai o resultado de cada verificação (logs e métricas). */
 export interface ReconciliationAlerts {

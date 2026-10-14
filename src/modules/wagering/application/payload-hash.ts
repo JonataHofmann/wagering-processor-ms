@@ -1,5 +1,5 @@
-import { canonicalHash } from '@/src/shared/application/canonical-hash';
 import { Money } from '@/src/shared/domain/money';
+import { canonicalHash } from '@/src/shared/util/canonical-hash';
 
 /** Campos de negócio que identificam o conteúdo de uma operação. */
 export interface PayloadHashFields {

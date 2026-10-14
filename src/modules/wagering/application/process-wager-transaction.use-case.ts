@@ -8,10 +8,10 @@ import {
 } from '@/src/modules/wagering/error/wagering.errors';
 import type { LedgerRepository } from '@/src/modules/wallet/application/ports/ledger.repository';
 import type { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';
-import { ResourceNotFoundError } from '@/src/shared/application/application-errors';
 import type { Clock } from '@/src/shared/application/ports/clock.port';
 import type { IdGenerator } from '@/src/shared/application/ports/id-generator.port';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
+import { ResourceNotFoundError } from '@/src/shared/error/application-errors';
 
 import { computePayloadHash } from '@/src/modules/wagering/application/payload-hash';
 

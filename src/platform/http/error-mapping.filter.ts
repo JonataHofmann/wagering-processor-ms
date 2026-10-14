@@ -1,5 +1,5 @@
 import { isTransientDatabaseError } from '@/src/infrastructure/persistence/pg-error';
-import { RequestValidationError } from '@/src/shared/application/application-errors';
+import { RequestValidationError } from '@/src/shared/error/application-errors';
 import { DomainError } from '@/src/shared/error/domain-error';
 import {
   type ArgumentsHost,

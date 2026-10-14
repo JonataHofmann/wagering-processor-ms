@@ -1,16 +1,20 @@
-import { ResourceNotFoundError } from '../../../shared/application/application-errors';
-import type { Clock } from '../../../shared/application/ports/clock.port';
-import type { TransactionManager } from '../../../shared/application/ports/transaction-manager.port';
-import type { MoneyProps } from '../../../shared/domain/money';
-import type { ReconciliationAlerts } from './ports/reconciliation-alerts.port';
-import type { ReconciliationRepository, WalletLedgerSnapshot } from './ports/reconciliation.repository';
+import type {
+  ReconciliationRepository,
+  WalletLedgerSnapshot,
+} from '../ports/reconciliation.repository';
+
+import type { Clock } from '../../../../shared/application/ports/clock.port';
+import type { MoneyProps } from '../../../../shared/domain/money';
+import type { ReconciliationAlerts } from '../ports/reconciliation-alerts.port';
+import { ResourceNotFoundError } from '../../../../shared/error/application-errors';
+import type { TransactionManager } from '../../../../shared/application/ports/transaction-manager.port';
 
 export type DiscrepancyCode =
-  | 'BALANCE_MISMATCH'      // saldo gravado ≠ soma do ledger (a verificação exigida pelo enunciado)
-  | 'LAST_ENTRY_MISMATCH'   // saldo gravado ≠ balance_after do último lançamento
-  | 'VERSION_MISMATCH'      // versão da wallet ≠ versão do último lançamento
-  | 'LEDGER_CHAIN_BROKEN'   // um lançamento não começa onde o anterior terminou
-  | 'LEDGER_VERSION_GAP';   // falta um lançamento na sequência de versões
+  | 'BALANCE_MISMATCH' // saldo gravado ≠ soma do ledger (a verificação exigida pelo enunciado)
+  | 'LAST_ENTRY_MISMATCH' // saldo gravado ≠ balance_after do último lançamento
+  | 'VERSION_MISMATCH' // versão da wallet ≠ versão do último lançamento
+  | 'LEDGER_CHAIN_BROKEN' // um lançamento não começa onde o anterior terminou
+  | 'LEDGER_VERSION_GAP'; // falta um lançamento na sequência de versões
 
 export interface Discrepancy {
   code: DiscrepancyCode;
@@ -35,7 +39,6 @@ export interface FullReconciliation {
   divergent: WalletReconciliation[];
 }
 
-
 /**
  * Avalia a foto: lista todas as divergências encontradas (vazia = consistente).
  * Os valores chegam do SQL já normalizados com duas casas como texto ("100.00"),
@@ -45,22 +48,43 @@ export function findDiscrepancies(s: WalletLedgerSnapshot): Discrepancy[] {
   const found: Discrepancy[] = [];
 
   if (s.storedBalance !== s.ledgerBalance) {
-    found.push({ code: 'BALANCE_MISMATCH', detail: `stored ${s.storedBalance} vs ledger ${s.ledgerBalance} (difference ${s.difference})` });
+    found.push({
+      code: 'BALANCE_MISMATCH',
+      detail: `stored ${s.storedBalance} vs ledger ${s.ledgerBalance} (difference ${s.difference})`,
+    });
   }
 
   if (s.ledgerEntries === 0) {
     // wallet aberta com saldo zero e nunca movimentada: versão 1, saldo 0
-    if (s.walletVersion !== 1) found.push({ code: 'VERSION_MISMATCH', detail: `version ${s.walletVersion} without ledger entries` });
+    if (s.walletVersion !== 1)
+      found.push({
+        code: 'VERSION_MISMATCH',
+        detail: `version ${s.walletVersion} without ledger entries`,
+      });
   } else {
     if (s.lastBalanceAfter !== null && s.storedBalance !== s.lastBalanceAfter) {
-      found.push({ code: 'LAST_ENTRY_MISMATCH', detail: `stored ${s.storedBalance} vs last entry ${s.lastBalanceAfter}` });
+      found.push({
+        code: 'LAST_ENTRY_MISMATCH',
+        detail: `stored ${s.storedBalance} vs last entry ${s.lastBalanceAfter}`,
+      });
     }
     if (s.lastLedgerVersion !== s.walletVersion) {
-      found.push({ code: 'VERSION_MISMATCH', detail: `wallet version ${s.walletVersion} vs last entry version ${s.lastLedgerVersion}` });
+      found.push({
+        code: 'VERSION_MISMATCH',
+        detail: `wallet version ${s.walletVersion} vs last entry version ${s.lastLedgerVersion}`,
+      });
     }
   }
-  if (s.chainBreaks > 0) found.push({ code: 'LEDGER_CHAIN_BROKEN', detail: `${s.chainBreaks} entries do not start where the previous ended` });
-  if (s.versionGaps > 0) found.push({ code: 'LEDGER_VERSION_GAP', detail: `${s.versionGaps} gaps in the wallet_version sequence` });
+  if (s.chainBreaks > 0)
+    found.push({
+      code: 'LEDGER_CHAIN_BROKEN',
+      detail: `${s.chainBreaks} entries do not start where the previous ended`,
+    });
+  if (s.versionGaps > 0)
+    found.push({
+      code: 'LEDGER_VERSION_GAP',
+      detail: `${s.versionGaps} gaps in the wallet_version sequence`,
+    });
 
   return found;
 }
@@ -79,8 +103,14 @@ export class ReconcileWalletsUseCase {
   ) {}
 
   async reconcile(walletId: string): Promise<WalletReconciliation> {
-    const snapshot = await this.transactionManager.runInTransaction(() => this.repository.snapshotOf(walletId));
-    if (snapshot === undefined) throw new ResourceNotFoundError('WALLET_NOT_FOUND', `wallet ${walletId} not found`);
+    const snapshot = await this.transactionManager.runInTransaction(() =>
+      this.repository.snapshotOf(walletId),
+    );
+    if (snapshot === undefined)
+      throw new ResourceNotFoundError(
+        'WALLET_NOT_FOUND',
+        `wallet ${walletId} not found`,
+      );
     const report = this.toReport(snapshot);
     this.alerts.walletChecked(report);
     return report;
@@ -94,7 +124,8 @@ export class ReconcileWalletsUseCase {
 
     for (;;) {
       const page = await this.transactionManager.runInTransaction(() =>
-        this.repository.snapshotPage({ afterWalletId, limit: pageSize }));
+        this.repository.snapshotPage({ afterWalletId, limit: pageSize }),
+      );
       for (const snapshot of page) {
         const report = this.toReport(snapshot);
         this.alerts.walletChecked(report);
@@ -111,7 +142,10 @@ export class ReconcileWalletsUseCase {
 
   private toReport(s: WalletLedgerSnapshot): WalletReconciliation {
     const discrepancies = findDiscrepancies(s);
-    const money = (amount: string): MoneyProps => ({ amount, currency: s.currency });
+    const money = (amount: string): MoneyProps => ({
+      amount,
+      currency: s.currency,
+    });
     return {
       walletId: s.walletId,
       consistent: discrepancies.length === 0,

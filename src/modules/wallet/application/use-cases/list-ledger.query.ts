@@ -1,13 +1,13 @@
 import {
   LedgerEntryView,
   toLedgerEntryView,
-} from '@/src/modules/wallet/application/wallet-view';
+} from '@/src/modules/wallet/application/use-cases/wallet-view';
 
-import { LedgerCursor } from '@/src/modules/wallet/application/ledger-cursor';
+import { LedgerCursor } from '@/src/modules/wallet/application/use-cases/ledger-cursor';
 import { LedgerRepository } from '@/src/modules/wallet/application/ports/ledger.repository';
-import { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';
-import { ResourceNotFoundError } from '@/src/shared/application/application-errors';
+import { ResourceNotFoundError } from '@/src/shared/error/application-errors';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
+import { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';
 
 export interface ListLedgerInput {
   walletId: string;

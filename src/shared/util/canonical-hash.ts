@@ -1,3 +1,4 @@
+import { CanonicalizationError } from '@/src/shared/error/canonicalization-error';
 import { createHash } from 'node:crypto';
 
 export type CanonicalValue =
@@ -8,12 +9,6 @@ export type CanonicalValue =
   | readonly CanonicalValue[]
   | { readonly [key: string]: CanonicalValue | undefined };
 
-export class CanonicalizationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'CanonicalizationError';
-  }
-}
 
 function isPlainObject(value: object): boolean {
   const proto: unknown = Object.getPrototypeOf(value);

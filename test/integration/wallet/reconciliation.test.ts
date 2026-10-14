@@ -1,9 +1,16 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { METRICS, type Metrics } from '../../../src/platform/observability/metrics';
-import { ReconcileWalletsUseCase } from '../../../src/modules/wallet/application/reconcile-wallets.use-case';
-import { queryOnce } from '../../support/pg';
+import { ReconcileWalletsUseCase } from '../../../src/modules/wallet/application/use-cases/reconcile-wallets.use-case';
+import {
+  METRICS,
+  type Metrics,
+} from '../../../src/platform/observability/metrics';
 import { startTestApp, type TestApp } from '../../support/http-app';
-import { type Json, type TestWallet, walletClient } from '../../support/wagering-client';
+import { queryOnce } from '../../support/pg';
+import {
+  type Json,
+  type TestWallet,
+  walletClient,
+} from '../../support/wagering-client';
 
 let t: TestApp;
 let api: ReturnType<typeof walletClient>;
@@ -14,10 +21,16 @@ beforeAll(async () => {
   api = walletClient(t.request);
   metrics = t.app.get<Metrics>(METRICS);
 });
-afterAll(async () => { await t?.close(); });
+afterAll(async () => {
+  await t?.close();
+});
 
-async function reconcile(walletId: string): Promise<{ status: number; body: Json }> {
-  const response = await t.request(`/wallets/${walletId}/reconciliation`, { method: 'POST' });
+async function reconcile(
+  walletId: string,
+): Promise<{ status: number; body: Json }> {
+  const response = await t.request(`/wallets/${walletId}/reconciliation`, {
+    method: 'POST',
+  });
   return { status: response.status, body: (await response.json()) as Json };
 }
 
@@ -34,7 +47,11 @@ async function walletWithHistory(): Promise<TestWallet> {
  * Simula uma corrupção feita por fora da aplicação (ex.: um UPDATE manual em produção).
  * Só o owner consegue, e só desligando os triggers que existem justamente para impedir isso.
  */
-async function corrupt(table: 'wallets' | 'wallet_ledger_entries', sql: string, params: unknown[]): Promise<void> {
+async function corrupt(
+  table: 'wallets' | 'wallet_ledger_entries',
+  sql: string,
+  params: unknown[],
+): Promise<void> {
   await queryOnce(t.db.ownerUrl, `ALTER TABLE ${table} DISABLE TRIGGER USER`);
   try {
     await queryOnce(t.db.ownerUrl, sql, params);
@@ -65,21 +82,40 @@ describe('POST /wallets/:walletId/reconciliation', () => {
   test('wallet aberta com saldo zero e nunca movimentada: consistente', async () => {
     const { wallet } = await api.openWallet('0.00');
     const { body } = await reconcile(wallet.walletId);
-    expect(body).toMatchObject({ consistent: true, ledgerEntries: 0, walletVersion: 1, ledgerBalance: { amount: '0.00' } });
+    expect(body).toMatchObject({
+      consistent: true,
+      ledgerEntries: 0,
+      walletVersion: 1,
+      ledgerBalance: { amount: '0.00' },
+    });
   });
 
   test('saldo alterado por fora: BALANCE_MISMATCH, log e métrica, e o saldo NÃO é corrigido', async () => {
     const w = await walletWithHistory();
-    await corrupt('wallets', `UPDATE wallets SET balance = balance + 5 WHERE id = $1`, [w.walletId]);
-    const divergencesBefore = metrics.value('wallet_reconciliation_divergences_total', { code: 'BALANCE_MISMATCH' });
+    await corrupt(
+      'wallets',
+      `UPDATE wallets SET balance = balance + 5 WHERE id = $1`,
+      [w.walletId],
+    );
+    const divergencesBefore = metrics.value(
+      'wallet_reconciliation_divergences_total',
+      { code: 'BALANCE_MISMATCH' },
+    );
 
     const { status, body } = await reconcile(w.walletId);
 
     expect(status).toBe(200); // divergência é um achado, não um erro da requisição
     expect(body.consistent).toBe(false);
     expect(body.difference).toEqual({ amount: '5.00', currency: 'BRL' });
-    expect(body.discrepancies.map((d: Json) => d.code).sort()).toEqual(['BALANCE_MISMATCH', 'LAST_ENTRY_MISMATCH']);
-    expect(metrics.value('wallet_reconciliation_divergences_total', { code: 'BALANCE_MISMATCH' })).toBe(divergencesBefore + 1);
+    expect(body.discrepancies.map((d: Json) => d.code).sort()).toEqual([
+      'BALANCE_MISMATCH',
+      'LAST_ENTRY_MISMATCH',
+    ]);
+    expect(
+      metrics.value('wallet_reconciliation_divergences_total', {
+        code: 'BALANCE_MISMATCH',
+      }),
+    ).toBe(divergencesBefore + 1);
 
     // nunca altera saldo silenciosamente: continua o valor corrompido, para investigação
     expect((await api.balanceOf(w)).amount).toBe('105.00');
@@ -88,21 +124,33 @@ describe('POST /wallets/:walletId/reconciliation', () => {
 
   test('lançamento apagado do meio do ledger: soma, corrente e sequência quebradas', async () => {
     const w = await walletWithHistory();
-    await corrupt('wallet_ledger_entries',
-      `DELETE FROM wallet_ledger_entries WHERE wallet_id = $1 AND wallet_version = 2`, [w.walletId]);
+    await corrupt(
+      'wallet_ledger_entries',
+      `DELETE FROM wallet_ledger_entries WHERE wallet_id = $1 AND wallet_version = 2`,
+      [w.walletId],
+    );
 
     const { body } = await reconcile(w.walletId);
     expect(body.consistent).toBe(false);
     expect(body.ledgerBalance.amount).toBe('130.00'); // o débito de 30 sumiu da soma
-    expect(body.discrepancies.map((d: Json) => d.code).sort())
-      .toEqual(['BALANCE_MISMATCH', 'LEDGER_CHAIN_BROKEN', 'LEDGER_VERSION_GAP']);
+    expect(body.discrepancies.map((d: Json) => d.code).sort()).toEqual([
+      'BALANCE_MISMATCH',
+      'LEDGER_CHAIN_BROKEN',
+      'LEDGER_VERSION_GAP',
+    ]);
   });
 
   test('versão da wallet adiantada em relação ao ledger: VERSION_MISMATCH', async () => {
     const w = await walletWithHistory();
-    await corrupt('wallets', `UPDATE wallets SET version = version + 1 WHERE id = $1`, [w.walletId]);
+    await corrupt(
+      'wallets',
+      `UPDATE wallets SET version = version + 1 WHERE id = $1`,
+      [w.walletId],
+    );
     const { body } = await reconcile(w.walletId);
-    expect(body.discrepancies.map((d: Json) => d.code)).toEqual(['VERSION_MISMATCH']);
+    expect(body.discrepancies.map((d: Json) => d.code)).toEqual([
+      'VERSION_MISMATCH',
+    ]);
   });
 
   test('404 para wallet inexistente; 400 para id fora do formato', async () => {
@@ -113,9 +161,15 @@ describe('POST /wallets/:walletId/reconciliation', () => {
 
 describe('reconciliação de todas as wallets', () => {
   test('varre em páginas e devolve só as divergentes; registra o resumo em métrica', async () => {
-    const healthy = await Promise.all(Array.from({ length: 7 }, () => walletWithHistory()));
+    const healthy = await Promise.all(
+      Array.from({ length: 7 }, () => walletWithHistory()),
+    );
     const broken = await walletWithHistory();
-    await corrupt('wallets', `UPDATE wallets SET balance = balance - 1 WHERE id = $1`, [broken.walletId]);
+    await corrupt(
+      'wallets',
+      `UPDATE wallets SET balance = balance - 1 WHERE id = $1`,
+      [broken.walletId],
+    );
 
     const result = await t.app.get(ReconcileWalletsUseCase).reconcileAll(3); // páginas pequenas: força várias
 
@@ -123,10 +177,17 @@ describe('reconciliação de todas as wallets', () => {
     expect(divergentIds).toContain(broken.walletId);
     for (const w of healthy) expect(divergentIds).not.toContain(w.walletId);
 
-    const [total] = await queryOnce<{ n: string }>(t.db.appUrl, `SELECT count(*) AS n FROM wallets`);
+    const [total] = await queryOnce<{ n: string }>(
+      t.db.appUrl,
+      `SELECT count(*) AS n FROM wallets`,
+    );
     expect(result.checked).toBe(Number(total!.n)); // nenhuma wallet pulada entre as páginas
-    expect(metrics.value('wallet_reconciliation_last_run_wallets')).toBe(result.checked);
-    expect(metrics.value('wallet_reconciliation_last_run_divergent_wallets')).toBe(result.divergent.length);
+    expect(metrics.value('wallet_reconciliation_last_run_wallets')).toBe(
+      result.checked,
+    );
+    expect(
+      metrics.value('wallet_reconciliation_last_run_divergent_wallets'),
+    ).toBe(result.divergent.length);
   });
 });
 
@@ -143,8 +204,14 @@ describe('reconciliação sob carga', () => {
       }
     })();
 
-    await Promise.all(Array.from({ length: 60 }, (_, i) =>
-      api.submit(wallet, { kind: i % 3 === 0 ? 'WIN' : 'BET', amount: '5.00' })));
+    await Promise.all(
+      Array.from({ length: 60 }, (_, i) =>
+        api.submit(wallet, {
+          kind: i % 3 === 0 ? 'WIN' : 'BET',
+          amount: '5.00',
+        }),
+      ),
+    );
     running = false;
     await reconciling;
 

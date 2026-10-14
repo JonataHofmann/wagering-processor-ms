@@ -16,9 +16,6 @@ import {
   type TransactionManager,
 } from '@/src/shared/application/ports/transaction-manager.port';
 import { Module } from '@nestjs/common';
-import { CreateWalletUseCase } from './application/create-wallet.use-case';
-import { GetWalletQuery } from './application/get-wallet.query';
-import { ListLedgerQuery } from './application/list-ledger.query';
 import {
   LEDGER_REPOSITORY,
   type LedgerRepository,
@@ -27,17 +24,26 @@ import {
   WALLET_REPOSITORY,
   type WalletRepository,
 } from './application/ports/wallet.repository';
-import { WalletsController } from './infrastructure/http/wallets.controller';
+import { CreateWalletUseCase } from './application/use-cases/create-wallet.use-case';
+import { GetWalletQuery } from './application/use-cases/get-wallet.query';
+import { ListLedgerQuery } from './application/use-cases/list-ledger.query';
 
 /**
  * Os casos de uso são classes puras (sem decorators do Nest).
  * O módulo os monta por factory, injetando as portas pelos tokens.
  */
 import { METRICS, type Metrics } from '../../platform/observability/metrics';
-import { RECONCILIATION_ALERTS, type ReconciliationAlerts } from './application/ports/reconciliation-alerts.port';
-import { RECONCILIATION_REPOSITORY, type ReconciliationRepository } from './application/ports/reconciliation.repository';
-import { ReconcileWalletsUseCase } from './application/reconcile-wallets.use-case';
+import {
+  RECONCILIATION_ALERTS,
+  type ReconciliationAlerts,
+} from './application/ports/reconciliation-alerts.port';
+import {
+  RECONCILIATION_REPOSITORY,
+  type ReconciliationRepository,
+} from './application/ports/reconciliation.repository';
+import { ReconcileWalletsUseCase } from './application/use-cases/reconcile-wallets.use-case';
 import { LoggingReconciliationAlerts } from './infrastructure/reconciliation/logging-reconciliation-alerts';
+import { WalletsController } from '@/src/modules/wallet/presentation/wallets.controller';
 @Module({
   controllers: [WalletsController],
   providers: [
@@ -88,14 +94,24 @@ import { LoggingReconciliationAlerts } from './infrastructure/reconciliation/log
     },
     {
       provide: RECONCILIATION_ALERTS,
-      useFactory: (metrics: Metrics) => new LoggingReconciliationAlerts(metrics),
+      useFactory: (metrics: Metrics) =>
+        new LoggingReconciliationAlerts(metrics),
       inject: [METRICS],
     },
     {
       provide: ReconcileWalletsUseCase,
-      useFactory: (tm: TransactionManager, repository: ReconciliationRepository, alerts: ReconciliationAlerts, clock: Clock) =>
-        new ReconcileWalletsUseCase(tm, repository, alerts, clock),
-      inject: [TRANSACTION_MANAGER, RECONCILIATION_REPOSITORY, RECONCILIATION_ALERTS, CLOCK],
+      useFactory: (
+        tm: TransactionManager,
+        repository: ReconciliationRepository,
+        alerts: ReconciliationAlerts,
+        clock: Clock,
+      ) => new ReconcileWalletsUseCase(tm, repository, alerts, clock),
+      inject: [
+        TRANSACTION_MANAGER,
+        RECONCILIATION_REPOSITORY,
+        RECONCILIATION_ALERTS,
+        CLOCK,
+      ],
     },
   ],
   exports: [ReconcileWalletsUseCase],

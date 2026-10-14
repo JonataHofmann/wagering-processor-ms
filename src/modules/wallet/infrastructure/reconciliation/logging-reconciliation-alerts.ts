@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { Metrics } from '../../../../platform/observability/metrics';
 import type { ReconciliationAlerts } from '../../application/ports/reconciliation-alerts.port';
-import type { WalletReconciliation } from '../../application/reconcile-wallets.use-case';
+import type { WalletReconciliation } from '../../application/use-cases/reconcile-wallets.use-case';
 
 /**
  * Toda verificação vira métrica; toda divergência vira log de erro estruturado

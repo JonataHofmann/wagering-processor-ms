@@ -1,12 +1,12 @@
 import { EntityManagerContext } from '@/src/infrastructure/persistence/entity-manager-context';
-import { isUniqueViolation } from '@/src/infrastructure/persistence/pg-error';
-import { WalletSchema } from '@/src/infrastructure/persistence/schemas/wallet.schema';
-import { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';
-import { Wallet } from '@/src/modules/wallet/domain/wallet';
-import { WalletAlreadyExistsError } from '@/src/modules/wallet/error/wallet.errors';
-import { WalletMapper } from '@/src/modules/wallet/infrastructure/persistence/wallet.mapper';
 import { InvariantViolationError } from '@/src/shared/error/invariant-violation-error';
 import { LockMode } from '@mikro-orm/postgresql';
+import { Wallet } from '@/src/modules/wallet/domain/wallet';
+import { WalletAlreadyExistsError } from '@/src/modules/wallet/error/wallet.errors';
+import { WalletMapper } from '@/src/modules/wallet/infrastructure/mappers/wallet.mapper';
+import { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';
+import { WalletSchema } from '@/src/infrastructure/persistence/schemas/wallet.schema';
+import { isUniqueViolation } from '@/src/infrastructure/persistence/pg-error';
 
 export class MikroWalletRepository implements WalletRepository {
   constructor(private readonly context: EntityManagerContext) {}

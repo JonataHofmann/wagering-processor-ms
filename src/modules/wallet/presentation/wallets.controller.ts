@@ -1,8 +1,14 @@
-import { CreateWalletUseCase } from '@/src/modules/wallet/application/create-wallet.use-case';
-import { GetWalletQuery } from '@/src/modules/wallet/application/get-wallet.query';
-import { ListLedgerQuery, LedgerPage } from '@/src/modules/wallet/application/list-ledger.query';
-import { WalletView } from '@/src/modules/wallet/application/wallet-view';
-import { RequestParser, parseUuidParam } from '@/src/platform/http/request-parsing';
+import { CreateWalletUseCase } from '@/src/modules/wallet/application/use-cases/create-wallet.use-case';
+import { GetWalletQuery } from '@/src/modules/wallet/application/use-cases/get-wallet.query';
+import {
+  LedgerPage,
+  ListLedgerQuery,
+} from '@/src/modules/wallet/application/use-cases/list-ledger.query';
+import { WalletView } from '@/src/modules/wallet/application/use-cases/wallet-view';
+import {
+  RequestParser,
+  parseUuidParam,
+} from '@/src/platform/http/request-parsing';
 import {
   Body,
   Controller,
@@ -14,8 +20,10 @@ import {
   Query,
 } from '@nestjs/common';
 
-
-import { ReconcileWalletsUseCase, type WalletReconciliation } from '../../application/reconcile-wallets.use-case';
+import {
+  ReconcileWalletsUseCase,
+  type WalletReconciliation,
+} from '@/src/modules/wallet/application/use-cases/reconcile-wallets.use-case';
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 
@@ -34,8 +42,12 @@ export class WalletsController {
    */
   @Post(':walletId/reconciliation')
   @HttpCode(200)
-  async reconcile(@Param('walletId') walletId: string): Promise<WalletReconciliation> {
-    return this.reconcileWallets.reconcile(parseUuidParam('walletId', walletId));
+  async reconcile(
+    @Param('walletId') walletId: string,
+  ): Promise<WalletReconciliation> {
+    return this.reconcileWallets.reconcile(
+      parseUuidParam('walletId', walletId),
+    );
   }
 
   @Post()

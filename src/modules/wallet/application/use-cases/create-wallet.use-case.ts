@@ -9,14 +9,14 @@ import { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.
 import {
   WalletView,
   toWalletView,
-} from '@/src/modules/wallet/application/wallet-view';
+} from '@/src/modules/wallet/application/use-cases/wallet-view';
 import { Wallet } from '@/src/modules/wallet/domain/wallet';
-import { canonicalHash } from '@/src/shared/application/canonical-hash';
 import type { Clock } from '@/src/shared/application/ports/clock.port';
 import type { IdGenerator } from '@/src/shared/application/ports/id-generator.port';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
 import type { EventContext } from '@/src/shared/domain/integration-event';
 import { Money, type MoneyProps } from '@/src/shared/domain/money';
+import { canonicalHash } from '@/src/shared/util/canonical-hash';
 
 export interface CreateWalletCommand {
   playerId: string;
