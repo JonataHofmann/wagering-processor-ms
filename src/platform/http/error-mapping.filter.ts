@@ -1,4 +1,9 @@
-import { isTransientDatabaseError } from '@/src/infrastructure/persistence/pg-error';
+import {
+  isLockConflict,
+  isTransientDatabaseError,
+  sqlStateOf,
+} from '@/src/infrastructure/persistence/pg-error';
+import { METRICS, type Metrics } from '@/src/platform/observability/metrics';
 import { RequestValidationError } from '@/src/shared/error/application-errors';
 import { DomainError } from '@/src/shared/error/domain-error';
 import {
@@ -6,6 +11,7 @@ import {
   Catch,
   type ExceptionFilter,
   HttpException,
+  Inject,
   Logger,
 } from '@nestjs/common';
 
@@ -52,6 +58,8 @@ interface HttpResponse {
 @Catch()
 export class ErrorMappingFilter implements ExceptionFilter {
   private readonly logger = new Logger(ErrorMappingFilter.name);
+
+  constructor(@Inject(METRICS) private readonly metrics: Metrics) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<HttpResponse>();
@@ -100,6 +108,11 @@ export class ErrorMappingFilter implements ExceptionFilter {
     }
 
     if (isTransientDatabaseError(exception)) {
+      if (isLockConflict(exception)) {
+        this.metrics.increment('database_lock_conflicts_total', {
+          sql_state: sqlStateOf(exception) ?? 'unknown',
+        });
+      }
       this.logger.warn(
         `transient database error: ${(exception as Error).message}`,
       );

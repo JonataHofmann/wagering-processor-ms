@@ -25,10 +25,12 @@ export interface WalletReconciliation {
   walletId: string;
   consistent: boolean;
   storedBalance: MoneyProps;
-  ledgerBalance: MoneyProps;
+  /** saldo reconstruído a partir do ledger (chamado "calculatedBalance" no enunciado) */
+  calculatedBalance: MoneyProps;
   difference: MoneyProps;
   walletVersion: number;
-  ledgerEntries: number;
+  /** lançamentos conferidos (chamado "checkedEntries" no enunciado) */
+  checkedEntries: number;
   lastLedgerVersion: number | null;
   discrepancies: Discrepancy[];
   checkedAt: string;
@@ -150,10 +152,10 @@ export class ReconcileWalletsUseCase {
       walletId: s.walletId,
       consistent: discrepancies.length === 0,
       storedBalance: money(s.storedBalance),
-      ledgerBalance: money(s.ledgerBalance),
+      calculatedBalance: money(s.ledgerBalance),
       difference: money(s.difference),
       walletVersion: s.walletVersion,
-      ledgerEntries: s.ledgerEntries,
+      checkedEntries: s.ledgerEntries,
       lastLedgerVersion: s.lastLedgerVersion,
       discrepancies,
       checkedAt: this.clock.now().toISOString(),

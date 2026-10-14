@@ -70,10 +70,10 @@ describe('POST /wallets/:walletId/reconciliation', () => {
       walletId: w.walletId,
       consistent: true,
       storedBalance: { amount: '100.00', currency: 'BRL' },
-      ledgerBalance: { amount: '100.00', currency: 'BRL' },
+      calculatedBalance: { amount: '100.00', currency: 'BRL' },
       difference: { amount: '0.00', currency: 'BRL' },
       walletVersion: 4,
-      ledgerEntries: 4,
+      checkedEntries: 4,
       lastLedgerVersion: 4,
       discrepancies: [],
     });
@@ -84,9 +84,9 @@ describe('POST /wallets/:walletId/reconciliation', () => {
     const { body } = await reconcile(wallet.walletId);
     expect(body).toMatchObject({
       consistent: true,
-      ledgerEntries: 0,
+      checkedEntries: 0,
       walletVersion: 1,
-      ledgerBalance: { amount: '0.00' },
+      calculatedBalance: { amount: '0.00' },
     });
   });
 
@@ -132,7 +132,7 @@ describe('POST /wallets/:walletId/reconciliation', () => {
 
     const { body } = await reconcile(w.walletId);
     expect(body.consistent).toBe(false);
-    expect(body.ledgerBalance.amount).toBe('130.00'); // o débito de 30 sumiu da soma
+    expect(body.calculatedBalance.amount).toBe('130.00'); // o débito de 30 sumiu da soma
     expect(body.discrepancies.map((d: Json) => d.code).sort()).toEqual([
       'BALANCE_MISMATCH',
       'LEDGER_CHAIN_BROKEN',

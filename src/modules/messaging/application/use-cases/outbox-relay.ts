@@ -4,6 +4,7 @@ import {
 } from '@/src/modules/messaging/application/ports/event-publisher.port';
 
 import { OutboxRepository } from '@/src/modules/messaging/application/ports/outbox.repository';
+import type { Metrics } from '@/src/platform/observability/metrics';
 import type { Clock } from '@/src/shared/application/ports/clock.port';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
 import type { ExponentialBackoff } from '@/src/shared/domain/backoff';
@@ -20,6 +21,7 @@ export interface OutboxRelayOptions {
   afterClaim?: () => void;
   /** gancho de teste: roda depois de publicar e antes de marcar como publicado */
   afterPublish?: () => void;
+  metrics?: Metrics;
 }
 
 export interface RelayRound {
@@ -76,6 +78,7 @@ export class OutboxRelay {
     const now = this.clock.now();
     let published = 0;
     let failed = 0;
+    let maxLagSeconds: number | undefined;
 
     await this.transactionManager.runInTransaction(async () => {
       for (const outcome of outcomes) {
@@ -85,6 +88,11 @@ export class OutboxRelay {
           message.markPublished(now);
           await this.outbox.markPublished(message);
           published += 1;
+          const lagSeconds =
+            (now.getTime() - message.occurredAt.getTime()) / 1000;
+          if (maxLagSeconds === undefined || lagSeconds > maxLagSeconds) {
+            maxLagSeconds = lagSeconds;
+          }
         } else {
           message.scheduleRetry(now, {
             error: outcome.error,
@@ -95,6 +103,11 @@ export class OutboxRelay {
         }
       }
     });
+
+    // gauge: lag do lote mais recente publicado; uma rodada vazia não apaga o último valor conhecido
+    if (maxLagSeconds !== undefined) {
+      this.options.metrics?.set('outbox_publish_lag_seconds', maxLagSeconds);
+    }
 
     return { claimed: claimed.length, published, failed };
   }

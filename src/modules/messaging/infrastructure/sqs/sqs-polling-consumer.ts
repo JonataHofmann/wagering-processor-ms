@@ -1,4 +1,5 @@
 import { runWithLogContext } from '@/src/platform/observability/log-context';
+import type { Metrics } from '@/src/platform/observability/metrics';
 import { ExponentialBackoff } from '@/src/shared/domain/backoff';
 import {
   ChangeMessageVisibilityCommand,
@@ -27,6 +28,7 @@ export interface SqsPollingConsumerOptions {
   /** atraso antes de a mensagem voltar a ficar visível, por número de recebimentos */
   retryBackoff?: ExponentialBackoff;
   handle: MessageHandlerFn;
+  metrics?: Metrics;
 }
 
 const MAX_BATCH_SIZE = 10;
@@ -177,6 +179,7 @@ export class SqsPollingConsumer {
 
   private async dispatch(message: Message): Promise<MessageDisposition> {
     const receiveCount = receiveCountOf(message);
+    const startedAt = performance.now();
     let disposition: MessageDisposition;
     try {
       disposition = await this.options.handle(message.Body ?? '');
@@ -185,6 +188,12 @@ export class SqsPollingConsumer {
         action: 'retry',
         reason: `handler threw: ${(error as Error).message}`,
       };
+    } finally {
+      this.options.metrics?.observe(
+        'sqs_message_processing_duration_seconds',
+        (performance.now() - startedAt) / 1000,
+        { queue: this.options.queueName },
+      );
     }
 
     if (
@@ -223,6 +232,9 @@ export class SqsPollingConsumer {
             MAX_VISIBILITY_TIMEOUT_SECONDS,
           );
           await this.changeVisibility(message, delaySeconds);
+          this.options.metrics?.increment('sqs_message_retries_total', {
+            queue: this.options.queueName,
+          });
           this.logger.warn({
             event: 'sqs_message_retry',
             delaySeconds,
@@ -233,6 +245,10 @@ export class SqsPollingConsumer {
         case 'dead-letter':
           await this.sendToDeadLetterQueue(message, disposition);
           await this.delete(message);
+          this.options.metrics?.increment('sqs_dead_letter_messages_total', {
+            queue: this.options.queueName,
+            reason: disposition.reason,
+          });
           this.logger.error({
             event: 'sqs_message_dead_lettered',
             reason: disposition.reason,

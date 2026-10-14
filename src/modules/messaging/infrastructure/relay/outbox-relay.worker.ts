@@ -14,6 +14,7 @@ import { OutboxRelay } from '@/src/modules/messaging/application/use-cases/outbo
 import { EventPublisher } from '@/src/modules/messaging/application/ports/event-publisher.port';
 import { OutboxRepository } from '@/src/modules/messaging/application/ports/outbox.repository';
 import { runWithLogContext } from '@/src/platform/observability/log-context';
+import type { Metrics } from '@/src/platform/observability/metrics';
 import type { RelayConfig } from './relay.config';
 
 /**
@@ -42,6 +43,7 @@ export class OutboxRelayWorker
     private readonly publisher: EventPublisher | undefined,
     private readonly clock: Clock,
     private readonly config: RelayConfig,
+    private readonly metrics: Metrics,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -61,6 +63,7 @@ export class OutboxRelayWorker
         leaseMs: this.config.leaseMs,
         afterClaim: () => faultPoint('crash-after-claim-before-publish'),
         afterPublish: () => faultPoint('crash-after-publish-before-mark'),
+        metrics: this.metrics,
       },
     );
     this.loop = this.run(relay);

@@ -28,8 +28,8 @@ export class WalletReconciliationDto {
   @ApiProperty({ type: MoneyDto })
   storedBalance!: MoneyDto;
 
-  @ApiProperty({ type: MoneyDto })
-  ledgerBalance!: MoneyDto;
+  @ApiProperty({ type: MoneyDto, description: 'Saldo reconstruído a partir do ledger' })
+  calculatedBalance!: MoneyDto;
 
   @ApiProperty({ type: MoneyDto })
   difference!: MoneyDto;
@@ -38,7 +38,7 @@ export class WalletReconciliationDto {
   walletVersion!: number;
 
   @ApiProperty()
-  ledgerEntries!: number;
+  checkedEntries!: number;
 
   @ApiPropertyOptional({ nullable: true })
   lastLedgerVersion!: number | null;

@@ -403,10 +403,10 @@ POST /wallets/:walletId/reconciliation
   "walletId": "...",
   "consistent": true,
   "storedBalance": { "amount": "975.00", "currency": "BRL" },
-  "ledgerBalance": { "amount": "975.00", "currency": "BRL" },
+  "calculatedBalance": { "amount": "975.00", "currency": "BRL" },
   "difference": { "amount": "0.00", "currency": "BRL" },
   "walletVersion": 2,
-  "ledgerEntries": 2,
+  "checkedEntries": 2,
   "lastLedgerVersion": 2,
   "discrepancies": [],
   "checkedAt": "..."

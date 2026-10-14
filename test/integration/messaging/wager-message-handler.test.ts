@@ -1,13 +1,4 @@
-import {
-  INBOX_REPOSITORY,
-  type InboxRepository,
-} from '@/src/modules/messaging/application/ports/inbox.repository';
-import { ProcessWagerTransactionUseCase } from '@/src/modules/wagering/application/use-cases/process-wager-transaction.use-case';
 import { WagerMessageHandler } from '@/src/modules/wagering/infrastructure/sqs/wager-message.handler';
-import {
-  TRANSACTION_MANAGER,
-  type TransactionManager,
-} from '@/src/shared/application/ports/transaction-manager.port';
 import { startTestApp, type TestApp } from '@/test/support/http-app';
 import { walletsInconsistentWithLedger } from '@/test/support/invariants';
 import {
@@ -27,12 +18,8 @@ beforeAll(async () => {
   t = await startTestApp();
   p = await connectPersistence(t.db);
   api = walletClient(t.request);
-  // o handler usa as MESMAS instâncias que a aplicação (caso de uso, transação, inbox)
-  handler = new WagerMessageHandler(
-    t.app.get(ProcessWagerTransactionUseCase),
-    t.app.get<TransactionManager>(TRANSACTION_MANAGER),
-    t.app.get<InboxRepository>(INBOX_REPOSITORY),
-  );
+  // o MESMO handler que a aplicação usa (caso de uso, transação, inbox, métricas)
+  handler = t.app.get(WagerMessageHandler);
 });
 
 afterAll(async () => {

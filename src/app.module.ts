@@ -8,7 +8,7 @@ import {
   MiddlewareConsumer,
   Module,
 } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { APP_ROLES, type AppRole } from './config/app-roles';
 import { PersistenceModule } from './infrastructure/persistence/persistence.module';
 import type { SqsConfig } from './modules/messaging/infrastructure/sqs/sqs.config';
@@ -29,8 +29,10 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { HealthController } from './platform/health/health.controller';
 import { ErrorMappingFilter } from './platform/http/error-mapping.filter';
 
+import { HttpMetricsInterceptor } from './platform/observability/http-metrics.interceptor';
 import { httpContextMiddleware } from './platform/observability/http-context.middleware';
 import { InMemoryMetrics, METRICS } from './platform/observability/metrics';
+import { MetricsController } from './platform/observability/metrics.controller';
 export interface AppOptions {
   databaseUrl: string;
   debug?: boolean;
@@ -93,8 +95,11 @@ export class AppModule {
         WalletModule,
         WageringModule,
       ],
-      controllers: [HealthController],
-      providers: [{ provide: APP_FILTER, useClass: ErrorMappingFilter }],
+      controllers: [HealthController, MetricsController],
+      providers: [
+        { provide: APP_FILTER, useClass: ErrorMappingFilter },
+        { provide: APP_INTERCEPTOR, useClass: HttpMetricsInterceptor },
+      ],
     };
   }
 }

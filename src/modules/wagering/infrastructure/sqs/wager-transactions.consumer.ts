@@ -7,6 +7,7 @@ import { AppRole } from '@/src/config/app-roles';
 import { SqsPollingConsumer } from '@/src/modules/messaging/infrastructure/sqs/sqs-polling-consumer';
 import { SqsConfig } from '@/src/modules/messaging/infrastructure/sqs/sqs.config';
 import { WagerMessageHandler } from '@/src/modules/wagering/infrastructure/sqs/wager-message.handler';
+import type { Metrics } from '@/src/platform/observability/metrics';
 import { faultPoint } from '@/src/platform/testing/fault-injection';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 
@@ -24,6 +25,7 @@ export class WagerTransactionsConsumer
     private readonly handler: WagerMessageHandler,
     private readonly client: SQSClient | undefined,
     private readonly config: SqsConfig | undefined,
+    private readonly metrics: Metrics,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -38,6 +40,7 @@ export class WagerTransactionsConsumer
       waitTimeSeconds: this.config.consumer.waitTimeSeconds,
       maxReceiveCount: this.config.consumer.maxReceiveCount,
       shutdownTimeoutMs: this.config.consumer.shutdownTimeoutMs,
+      metrics: this.metrics,
       handle: async (body) => {
         const disposition = await this.handler.handle(body);
         faultPoint('crash-after-commit-before-ack'); // teste: commit feito, ack ainda não

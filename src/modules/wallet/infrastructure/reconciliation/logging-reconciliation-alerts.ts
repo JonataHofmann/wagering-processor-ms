@@ -27,7 +27,7 @@ export class LoggingReconciliationAlerts implements ReconciliationAlerts {
       event: 'WALLET_LEDGER_DIVERGENCE',
       walletId: report.walletId,
       storedBalance: report.storedBalance,
-      ledgerBalance: report.ledgerBalance,
+      calculatedBalance: report.calculatedBalance,
       difference: report.difference,
       walletVersion: report.walletVersion,
       lastLedgerVersion: report.lastLedgerVersion,

@@ -1,4 +1,5 @@
 import { APP_ROLES, type AppRole } from '@/src/config/app-roles';
+import { METRICS, type Metrics } from '@/src/platform/observability/metrics';
 import { CLOCK, type Clock } from '@/src/shared/application/ports/clock.port';
 import {
   TRANSACTION_MANAGER,
@@ -83,8 +84,17 @@ export class MessagingModule {
             publisher: EventPublisher | undefined,
             clock: Clock,
             config: RelayConfig,
+            metrics: Metrics,
           ) =>
-            new OutboxRelayWorker(roles, tm, outbox, publisher, clock, config),
+            new OutboxRelayWorker(
+              roles,
+              tm,
+              outbox,
+              publisher,
+              clock,
+              config,
+              metrics,
+            ),
           inject: [
             APP_ROLES,
             TRANSACTION_MANAGER,
@@ -92,6 +102,7 @@ export class MessagingModule {
             { token: EVENT_PUBLISHER, optional: true },
             CLOCK,
             RELAY_CONFIG,
+            METRICS,
           ],
         },
       ],

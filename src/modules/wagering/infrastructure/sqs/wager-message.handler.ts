@@ -7,11 +7,16 @@ import {
   parseWagerTransactionRequested,
 } from '@/src/modules/wagering/infrastructure/sqs/wager-transaction-requested.message';
 
-import { isTransientDatabaseError } from '@/src/infrastructure/persistence/pg-error';
+import {
+  isLockConflict,
+  isTransientDatabaseError,
+  sqlStateOf,
+} from '@/src/infrastructure/persistence/pg-error';
 import { InboxRepository } from '@/src/modules/messaging/application/ports/inbox.repository';
 import { TransactionResult } from '@/src/modules/wagering/application/use-cases/transaction-view';
 import { DuplicateMessageError } from '@/src/modules/wagering/error/wagering.errors';
 import { enrichLogContext } from '@/src/platform/observability/log-context';
+import type { Metrics } from '@/src/platform/observability/metrics';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
 import { DomainError } from '@/src/shared/error/domain-error';
 
@@ -37,6 +42,7 @@ export class WagerMessageHandler {
     private readonly processTransaction: ProcessWagerTransactionUseCase,
     private readonly transactionManager: TransactionManager,
     private readonly inbox: InboxRepository,
+    private readonly metrics: Metrics,
     private readonly consumerName: string = WAGER_TRANSACTIONS_CONSUMER,
   ) {}
 
@@ -89,8 +95,12 @@ export class WagerMessageHandler {
         const seen = await this.transactionManager.runInTransaction(() =>
           this.inbox.find(receipt.consumerName, receipt.messageId),
         );
-        if (seen?.matchesPayload(receipt.payloadHash))
+        if (seen?.matchesPayload(receipt.payloadHash)) {
+          this.metrics.increment('wagering_duplicates_detected_total', {
+            source: 'inbox_message',
+          });
           return { action: 'ack', reason: 'duplicate' };
+        }
         return {
           action: 'dead-letter',
           reason: 'MESSAGE_ID_REUSED',
@@ -115,6 +125,11 @@ export class WagerMessageHandler {
 
     // banco fora, lock_timeout, deadlock: pode dar certo depois
     if (isTransientDatabaseError(error)) {
+      if (isLockConflict(error)) {
+        this.metrics.increment('database_lock_conflicts_total', {
+          sql_state: sqlStateOf(error) ?? 'unknown',
+        });
+      }
       return {
         action: 'retry',
         reason: `transient: ${(error as Error).message}`,

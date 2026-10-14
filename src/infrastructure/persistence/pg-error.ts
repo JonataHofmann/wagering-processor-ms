@@ -52,6 +52,12 @@ export function isTransientDatabaseError(error: unknown): boolean {
   ); // classe 08: connection exception
 }
 
+/** Disputa de lock entre transações (lock_timeout ou deadlock) — vira a métrica database_lock_conflicts_total. */
+export function isLockConflict(error: unknown): boolean {
+  const state = sqlStateOf(error);
+  return state === SqlState.LockNotAvailable || state === SqlState.DeadlockDetected;
+}
+
 /** Violação dos triggers de integridade: sempre bug no código. */
 export function isIntegrityViolation(error: unknown): boolean {
   const state = sqlStateOf(error);

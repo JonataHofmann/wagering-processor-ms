@@ -19,6 +19,7 @@ import {
   ID_GENERATOR,
   IdGenerator,
 } from '@/src/shared/application/ports/id-generator.port';
+import { METRICS, type Metrics } from '@/src/platform/observability/metrics';
 
 import { GetTransactionQuery } from '@/src/modules/wagering/application/use-cases/get-transaction.query';
 import { ProcessWagerTransactionUseCase } from '@/src/modules/wagering/application/use-cases/process-wager-transaction.use-case';
@@ -78,6 +79,7 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
         clock: Clock,
         settlement: WagerSettlement,
         referenceLookup: ReferenceLookupPolicy,
+        metrics: Metrics,
       ) =>
         new ProcessWagerTransactionUseCase({
           transactionManager,
@@ -90,6 +92,7 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
           clock,
           settlement,
           referenceLookup,
+          metrics,
         }),
       inject: [
         TRANSACTION_MANAGER,
@@ -102,6 +105,7 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
         CLOCK,
         WagerSettlement,
         REFERENCE_LOOKUP_POLICY,
+        METRICS,
       ],
     },
     {
@@ -145,11 +149,13 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
         useCase: ProcessWagerTransactionUseCase,
         tm: TransactionManager,
         inbox: InboxRepository,
-      ) => new WagerMessageHandler(useCase, tm, inbox),
+        metrics: Metrics,
+      ) => new WagerMessageHandler(useCase, tm, inbox, metrics),
       inject: [
         ProcessWagerTransactionUseCase,
         TRANSACTION_MANAGER,
         INBOX_REPOSITORY,
+        METRICS,
       ],
     },
     {
@@ -159,12 +165,14 @@ import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactio
         handler: WagerMessageHandler,
         client: SQSClient | undefined,
         config: SqsConfig | undefined,
-      ) => new WagerTransactionsConsumer(roles, handler, client, config),
+        metrics: Metrics,
+      ) => new WagerTransactionsConsumer(roles, handler, client, config, metrics),
       inject: [
         APP_ROLES,
         WagerMessageHandler,
         { token: SQS_CLIENT, optional: true },
         { token: SQS_CONFIG, optional: true },
+        METRICS,
       ],
     },
     {

@@ -18,12 +18,17 @@ A correção financeira é garantida pelo **PostgreSQL**, não pelo broker nem p
 |                             | 4. Schema, constraints, triggers, permissões e testes | Concluída |
 | Domínio puro                | 5. `Money`                                            | Concluída |
 |                             | 6. `Wallet` e `WalletLedgerEntry`                     | Concluída |
-|                             | 7. `WagerTransaction`                                 | Pendente  |
-|                             | 8. `InboxMessage` e `OutboxMessage`                   | Pendente  |
-| Persistência e casos de uso | 9 a 12                                                | Pendente  |
-| Instâncias e mensageria     | 13 a 16                                               | Pendente  |
-| Garantias finais            | 17 a 20                                               | Pendente  |
-| Entrega                     | 21 a 23                                               | Pendente  |
+|                             | 7. `WagerTransaction`                                 | Concluída |
+|                             | 8. `InboxMessage` e `OutboxMessage`                   | Concluída |
+| Persistência e casos de uso | 9 a 12 (casos de uso, HTTP, consumer SQS)             | Concluída |
+| Instâncias e mensageria     | 13 a 16 (múltiplas instâncias, outbox relay, scheduler) | Concluída |
+| Garantias finais            | 17 a 20 (concorrência, resiliência, reconciliação)    | Concluída |
+| Entrega                     | 21 a 23 (observabilidade, documentação, polimento)    | Concluída, exceto o abaixo |
+
+Itens específicos ainda em aberto (não bloqueiam nenhuma garantia financeira ou de concorrência):
+
+- **`GET /metrics` em formato Prometheus.** As métricas já são contadas em memória (`InMemoryMetrics`) e a reconciliação já emite as suas; falta expor via HTTP e instrumentar o restante da lista da seção 12 do enunciado (transações por status, duplicatas, retries, DLQ, conflitos de lock, outbox lag, latência).
+- **Teste de carga (`bun run test:load`).** Diferencial opcional, não implementado.
 
 ---
 
@@ -403,6 +408,12 @@ Lock por linha, nunca global: wallets diferentes rodam em paralelo.
    o perdedor relê e responde replay ou 409.
 4. Toda decisão é persistida, inclusive REJECTED e PENDING_REFERENCE, com o saldo observado:
    o replay devolve a resposta original, com o saldo da época.
+
+**Formato recomendado da key.** O servidor aceita qualquer string (até 255 chars) como
+Idempotency-Key — ele não impõe formato. O default recomendado ao provedor é
+`"{providerId}:{externalTransactionId}"`, que é o que os clientes de teste deste repositório
+usam (`test/support/wagering-client.ts`); não há validação de formato porque a chave é
+opaca para o servidor, só a unicidade importa.
 
 **payloadHash.** SHA-256 (hex) de JSON canônico RFC 8785 sobre: providerId,
 externalTransactionId, playerId, walletId, roundId, gameId, kind, money (amount com 2 casas,

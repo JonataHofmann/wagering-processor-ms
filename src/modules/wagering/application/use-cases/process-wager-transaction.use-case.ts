@@ -8,6 +8,7 @@ import {
 } from '@/src/modules/wagering/error/wagering.errors';
 import type { LedgerRepository } from '@/src/modules/wallet/application/ports/ledger.repository';
 import type { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';
+import type { Metrics } from '@/src/platform/observability/metrics';
 import type { Clock } from '@/src/shared/application/ports/clock.port';
 import type { IdGenerator } from '@/src/shared/application/ports/id-generator.port';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
@@ -64,6 +65,7 @@ export interface ProcessWagerTransactionDependencies {
   clock: Clock;
   settlement: WagerSettlement;
   referenceLookup: ReferenceLookupPolicy;
+  metrics: Metrics;
 }
 
 /**
@@ -78,6 +80,22 @@ export class ProcessWagerTransactionUseCase {
   constructor(private readonly deps: ProcessWagerTransactionDependencies) {}
 
   async execute(
+    command: ProcessWagerTransactionCommand,
+    receipt?: InboxReceipt,
+  ): Promise<TransactionResult> {
+    const result = await this.doExecute(command, receipt);
+    this.deps.metrics.increment('wagering_transactions_total', {
+      status: result.status,
+    });
+    if (result.idempotentReplay) {
+      this.deps.metrics.increment('wagering_duplicates_detected_total', {
+        source: 'idempotency_key',
+      });
+    }
+    return result;
+  }
+
+  private async doExecute(
     command: ProcessWagerTransactionCommand,
     receipt?: InboxReceipt,
   ): Promise<TransactionResult> {
