@@ -347,6 +347,62 @@ saldo final exato em todas as wallets; uma transação por operação, todas PRO
 lançamento por movimento e saldo = ledger; cada mensagem uma única vez na inbox, DLQ e fila
 vazias; toda a outbox publicada e presente no broker; e `bun run reconcile` com exit 0.
 
+### ADR-008 — Autenticação: adiada, preparada via Port/Adapter
+
+**Status:** Aceito (estrutura); integração real com Keycloak **não implementada**
+
+**Contexto.** A seção 2 do enunciado zera a pontuação de autenticação de propósito, pra não
+competir com correção financeira, concorrência e idempotência no timebox. Ao mesmo tempo,
+pede que, optando por não implementar, a decisão seja documentada aqui, com o desenho que
+seria adotado e um ponto de extensão explícito no código — é isso que este ADR registra.
+
+**Decisão.**
+
+- `ProviderIdentityPort` (`src/platform/auth/provider-identity.port.ts`): contrato puro,
+  sem import de NestJS nem de Keycloak — `authenticate(token?: string): Promise<ProviderIdentity>`,
+  onde `ProviderIdentity = { subject, providerId, roles }` (`subject` equivalente ao claim
+  `sub` de um JWT).
+- `NoOpProviderIdentityAdapter`: implementação **temporária**, nunca valida token, nunca
+  consulta Keycloak, nunca faz I/O — devolve sempre a mesma identidade fictícia
+  (`local-service-account` / `development-provider` / `['provider']`).
+- `ProviderAuthGuard` extrai o token do header `Authorization: Bearer <token>` (quando
+  presente), delega ao Port, e disponibiliza a identidade em `request.providerIdentity`;
+  não conhece Keycloak nem valida assinatura de JWT. Falha de autenticação vira
+  `UnauthorizedException`.
+- `CurrentProvider()`: decorator de parâmetro que lê a identidade do request — nunca do
+  `providerId` que o cliente mandou no corpo. Lança se usado sem o Guard na frente (erro de
+  programação, não caminho de negócio).
+- `AuthModule.forRoot(config)`: módulo `@Global()`, liga `PROVIDER_IDENTITY_PORT` ao adapter
+  certo conforme `AuthConfig.mode`. Hoje só existe o `case 'noop'` no `useFactory` — trocar
+  pelo adapter do Keycloak é a única mudança necessária; Guard, decorator e qualquer
+  controller continuam iguais.
+- `AUTH_MODE` **não tem fallback implícito**: ausente, falha o boot. `AUTH_MODE=noop` só é
+  aceito com `NODE_ENV=development|test`; em qualquer outro `NODE_ENV` a aplicação recusa
+  subir. `AUTH_MODE=keycloak` falha explicitamente ("ainda não implementado"), em vez de
+  deixar passar uma validação pela metade (`src/platform/auth/auth.config.ts`).
+- **Nenhum controller existente usa o Guard hoje.** Ligar `@UseGuards(ProviderAuthGuard)` nos
+  endpoints de `wagering`/`wallet` é decisão de produto (quais rotas exigem identidade de
+  provedor) e troca de contrato (o `providerId` do corpo deixaria de ser confiável, viria de
+  `@CurrentProvider()`) — fora do escopo desta etapa, que só prepara a estrutura.
+  `/health/*` e `/metrics` continuam sempre abertos, como o enunciado exige.
+
+**Desenho da integração futura com Keycloak** (não implementado agora):
+
+- Validar a assinatura do JWT com as chaves públicas do JWKS do realm, com cache e rotação
+  de chaves (sem chamada HTTP ao Keycloak a cada requisição).
+- Validar `iss`, `aud`, `exp` e demais claims relevantes.
+- Extrair `sub` como `subject`; mapear `providerId` a partir de um claim confiável ou de um
+  mapeamento interno; extrair `roles` dos realm/client roles.
+- Rejeitar token inválido, expirado ou sem a permissão exigida.
+
+**Limitações do modo no-op.** Não autentica nada de verdade — qualquer chamador recebe a
+mesma identidade fictícia. Por isso o guard de `NODE_ENV` existe: o modo nunca pode ser
+ativado fora de `development`/`test`, mesmo por engano.
+
+**Consequências.** O domínio e os casos de uso nunca dependem de Keycloak nem de JWT —
+só do `ProviderIdentity` que o Port devolve. Trocar o adapter é a única mudança necessária
+quando a integração real for feita.
+
 ### ADR-009 — Camada de aplicação e contrato HTTP de erros
 
 **Status:** Aceito (wallets); estendido na etapa 11 (transações)

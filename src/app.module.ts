@@ -26,6 +26,8 @@ import {
 } from './modules/wagering/infrastructure/scheduler/scheduler.config';
 import { WageringModule } from './modules/wagering/wagering.module';
 import { WalletModule } from './modules/wallet/wallet.module';
+import { type AuthConfig, authConfigFromEnv } from './platform/auth/auth.config';
+import { AuthModule } from './platform/auth/auth.module';
 import { HealthController } from './platform/health/health.controller';
 import { ErrorMappingFilter } from './platform/http/error-mapping.filter';
 
@@ -44,6 +46,7 @@ export interface AppOptions {
   relay?: RelayConfig;
   referenceLookup?: ReferenceLookupConfig;
   scheduler?: SchedulerConfig;
+  auth?: AuthConfig;
 }
 
 @Global()
@@ -85,6 +88,10 @@ export class AppModule {
           options.referenceLookup ?? referenceLookupConfigFromEnv({}),
           options.scheduler ?? schedulerConfigFromEnv({}),
         ),
+        // ao contrário dos configs acima, authConfigFromEnv não tem default seguro pra
+        // "ambiente vazio" (não existe no-op implícito) — por isso lê o process.env de
+        // verdade (.env) quando a chamadora não passa `auth` explicitamente.
+        AuthModule.forRoot(options.auth ?? authConfigFromEnv()),
         PersistenceModule.forRoot({
           databaseUrl: options.databaseUrl,
         }),
