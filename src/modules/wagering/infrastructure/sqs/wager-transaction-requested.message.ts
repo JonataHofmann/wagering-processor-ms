@@ -3,13 +3,24 @@ import {
   canonicalHash,
 } from '@/src/shared/util/canonical-hash';
 
+import { MoneyDto } from '@/src/platform/http/dto/money.dto';
 import { ProcessWagerTransactionCommand } from '@/src/modules/wagering/application/use-cases/process-wager-transaction.use-case';
-import { RequestParser } from '@/src/platform/http/request-parsing';
-import { RequestValidationError } from '@/src/shared/error/application-errors';
 import { WagerTransactionKind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
+import { flattenValidationErrors } from '@/src/shared/util/flatten-validation-errors';
+import { plainToInstance, Type } from 'class-transformer';
+import {
+  IsDefined,
+  IsEnum,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  ValidateNested,
+  validateSync,
+} from 'class-validator';
 
 export const WAGER_TRANSACTION_REQUESTED = 'WagerTransactionRequested';
-const KINDS = Object.values(WagerTransactionKind);
 
 /** Mensagem que nunca vai ser processável como está: vai para a DLQ, sem retry. */
 export class InvalidMessageError extends Error {
@@ -26,10 +37,67 @@ export interface ParsedWagerMessage {
   command: ProcessWagerTransactionCommand;
 }
 
-/**
- * Lê o envelope do enunciado:
- * { messageId, type: "WagerTransactionRequested", occurredAt, data: { ...operação } }
- */
+class WagerTransactionDataDto {
+  @IsString()
+  @MaxLength(255)
+  idempotencyKey!: string;
+
+  @IsString()
+  @MaxLength(64)
+  providerId!: string;
+
+  @IsString()
+  @MaxLength(128)
+  externalTransactionId!: string;
+
+  @IsUUID()
+  playerId!: string;
+
+  @IsUUID()
+  walletId!: string;
+
+  @IsString()
+  @MaxLength(128)
+  roundId!: string;
+
+  @IsString()
+  @MaxLength(128)
+  gameId!: string;
+
+  @IsEnum(WagerTransactionKind)
+  kind!: WagerTransactionKind;
+
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => MoneyDto)
+  money!: MoneyDto;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  referenceExternalTransactionId?: string;
+}
+
+/** Envelope do enunciado: { messageId, type: "WagerTransactionRequested", occurredAt, data: { ...operação } }. */
+class WagerTransactionRequestedEnvelopeDto {
+  @IsString()
+  @MaxLength(128)
+  messageId!: string;
+
+  @IsIn([WAGER_TRANSACTION_REQUESTED])
+  type!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  correlationId?: string;
+
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => WagerTransactionDataDto)
+  data!: WagerTransactionDataDto;
+}
+
 export function parseWagerTransactionRequested(
   rawBody: string,
 ): ParsedWagerMessage {
@@ -40,57 +108,40 @@ export function parseWagerTransactionRequested(
     throw new InvalidMessageError('message body is not valid JSON');
   }
 
-  try {
-    const envelope = new RequestParser(body);
-    envelope.requireObject('');
-    const messageId = envelope.string('messageId', { maxLength: 128 });
-    const type = envelope.oneOf('type', [WAGER_TRANSACTION_REQUESTED] as const);
-    const correlationId = envelope.string('correlationId', {
-      required: false,
-      maxLength: 128,
-    });
-    envelope.requireObject('data');
-    envelope.assertValid();
-
-    const data = new RequestParser((body as { data: unknown }).data);
-    const command: ProcessWagerTransactionCommand = {
-      idempotencyKey: data.string('idempotencyKey', { maxLength: 255 })!,
-      providerId: data.string('providerId', { maxLength: 64 })!,
-      externalTransactionId: data.string('externalTransactionId', {
-        maxLength: 128,
-      })!,
-      playerId: data.uuid('playerId')!,
-      walletId: data.uuid('walletId')!,
-      roundId: data.string('roundId', { maxLength: 128 })!,
-      gameId: data.string('gameId', { maxLength: 128 })!,
-      kind: data.oneOf('kind', KINDS)!,
-      money: {
-        amount: data.string('money.amount')!,
-        currency: data.string('money.currency')!,
-      },
-      referenceExternalTransactionId: data.string(
-        'referenceExternalTransactionId',
-        { required: false, maxLength: 128 },
-      ),
-      correlationId: correlationId ?? messageId!,
-      causationId: messageId!,
-    };
-    data.assertValid();
-
-    return {
-      messageId: messageId!,
-      payloadHash: canonicalHash({
-        type: type!,
-        data: (body as { data: CanonicalValue }).data,
-      }),
-      command,
-    };
-  } catch (error) {
-    if (error instanceof RequestValidationError) {
-      throw new InvalidMessageError(
-        `invalid message: ${error.violations.map((v) => `${v.field} ${v.message}`).join('; ')}`,
-      );
-    }
-    throw error;
+  const envelope = plainToInstance(WagerTransactionRequestedEnvelopeDto, body);
+  const errors = validateSync(envelope, { whitelist: true });
+  if (errors.length > 0) {
+    throw new InvalidMessageError(
+      `invalid message: ${flattenValidationErrors(errors)
+        .map((v) => `${v.field} ${v.message}`)
+        .join('; ')}`,
+    );
   }
+
+  const data = envelope.data;
+  const command: ProcessWagerTransactionCommand = {
+    idempotencyKey: data.idempotencyKey,
+    providerId: data.providerId,
+    externalTransactionId: data.externalTransactionId,
+    playerId: data.playerId,
+    walletId: data.walletId,
+    roundId: data.roundId,
+    gameId: data.gameId,
+    kind: data.kind,
+    money: { amount: data.money.amount, currency: data.money.currency },
+    referenceExternalTransactionId: data.referenceExternalTransactionId,
+    correlationId: envelope.correlationId ?? envelope.messageId,
+    causationId: envelope.messageId,
+  };
+
+  return {
+    messageId: envelope.messageId,
+    // hash sobre o payload BRUTO (não o DTO validado), para não mudar o hash se o
+    // payload tiver campos extras que o whitelist do DTO ignoraria.
+    payloadHash: canonicalHash({
+      type: envelope.type,
+      data: (body as { data: CanonicalValue }).data,
+    }),
+    command,
+  };
 }

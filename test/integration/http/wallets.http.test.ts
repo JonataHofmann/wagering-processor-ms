@@ -267,11 +267,11 @@ describe('POST /wallets', () => {
   test('400 lista todas as violações de uma vez', async () => {
     const { status, body } = await createWallet({ playerId: 'abc' });
     expect(status).toBe(400);
+    // initialBalance ausente por inteiro: o class-validator não desce para
+    // initialBalance.amount/currency quando não há objeto nenhum para validar.
     expect(body.error.details.map((d: { field: string }) => d.field)).toEqual([
       'playerId',
       'initialBalance',
-      'initialBalance.amount',
-      'initialBalance.currency',
     ]);
   });
 

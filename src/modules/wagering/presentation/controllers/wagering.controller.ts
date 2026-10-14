@@ -4,16 +4,12 @@ import {
   TransactionResult,
   TransactionView,
 } from '@/src/modules/wagering/application/use-cases/transaction-view';
-import { WagerTransactionKind } from '@/src/modules/wagering/domain/value-objects/wager-transaction-kind';
 import { WagerTransactionStatus } from '@/src/modules/wagering/domain/value-objects/wager-transaction-status';
 import { ApiErrorResponseDto } from '@/src/platform/http/dto/api-error-response.dto';
+import { requireIdempotencyKey } from '@/src/platform/http/idempotency-key';
 import { SubmitWagerTransactionRequestDto } from '@/src/modules/wagering/presentation/dto/submit-wager-transaction.request.dto';
 import { TransactionResultDto } from '@/src/modules/wagering/presentation/dto/transaction-result.response.dto';
 import { TransactionViewDto } from '@/src/modules/wagering/presentation/dto/transaction-view.response.dto';
-import {
-  RequestParser,
-  parseUuidParam,
-} from '@/src/platform/http/request-parsing';
 import {
   currentLogContext,
   enrichLogContext,
@@ -24,6 +20,7 @@ import {
   Get,
   Headers,
   Param,
+  ParseUUIDPipe,
   Post,
   Res,
 } from '@nestjs/common';
@@ -43,8 +40,6 @@ const STATUS_BY_RESULT: Readonly<Record<WagerTransactionStatus, number>> = {
   [WagerTransactionStatus.Pending]: 202,
   [WagerTransactionStatus.Failed]: 500, // falha permanente de infraestrutura
 };
-
-const KINDS = Object.values(WagerTransactionKind);
 
 interface StatusSettable {
   status(code: number): unknown;
@@ -96,48 +91,23 @@ export class WageringController {
     type: TransactionResultDto,
   })
   async submit(
-    @Body() body: unknown,
-    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body() body: SubmitWagerTransactionRequestDto,
+    @Headers('idempotency-key') idempotencyKeyHeader: string | undefined,
     @Res({ passthrough: true }) response: StatusSettable,
   ): Promise<TransactionResult> {
-    const headers = new RequestParser({ 'Idempotency-Key': idempotencyKey });
-    const key = headers.string('Idempotency-Key', { maxLength: 255 });
-    headers.assertValid();
-
-    const parser = new RequestParser(body);
-    parser.requireObject('');
-    const providerId = parser.string('providerId', { maxLength: 64 });
-    const externalTransactionId = parser.string('externalTransactionId', {
-      maxLength: 128,
-    });
-    const playerId = parser.uuid('playerId');
-    const walletId = parser.uuid('walletId');
-    const roundId = parser.string('roundId', { maxLength: 128 });
-    const gameId = parser.string('gameId', { maxLength: 128 });
-    const kind = parser.oneOf('kind', KINDS);
-    parser.requireObject('money');
-    const amount = parser.string('money.amount');
-    const currency = parser.string('money.currency');
-    const referenceExternalTransactionId = parser.string(
-      'referenceExternalTransactionId',
-      {
-        required: false,
-        maxLength: 128,
-      },
-    );
-    parser.assertValid();
-    enrichLogContext({ walletId: walletId! });
+    const idempotencyKey = requireIdempotencyKey(idempotencyKeyHeader);
+    enrichLogContext({ walletId: body.walletId });
     const result = await this.processTransaction.execute({
-      idempotencyKey: key!,
-      providerId: providerId!,
-      externalTransactionId: externalTransactionId!,
-      playerId: playerId!,
-      walletId: walletId!,
-      roundId: roundId!,
-      gameId: gameId!,
-      kind: kind!,
-      money: { amount: amount!, currency: currency! },
-      referenceExternalTransactionId,
+      idempotencyKey,
+      providerId: body.providerId,
+      externalTransactionId: body.externalTransactionId,
+      playerId: body.playerId,
+      walletId: body.walletId,
+      roundId: body.roundId,
+      gameId: body.gameId,
+      kind: body.kind,
+      money: { amount: body.money.amount, currency: body.money.currency },
+      referenceExternalTransactionId: body.referenceExternalTransactionId,
       correlationId: currentLogContext()?.correlationId ?? crypto.randomUUID(),
     });
 
@@ -156,11 +126,9 @@ export class WageringController {
     type: ApiErrorResponseDto,
   })
   async byId(
-    @Param('transactionId') transactionId: string,
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
   ): Promise<TransactionView> {
-    return this.getTransaction.byId(
-      parseUuidParam('transactionId', transactionId),
-    );
+    return this.getTransaction.byId(transactionId);
   }
 
   @Get('providers/:providerId/wagering/transactions/:externalTransactionId')

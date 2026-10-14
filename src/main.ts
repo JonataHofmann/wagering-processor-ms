@@ -10,6 +10,7 @@ import { AppModule } from './app.module';
 import { parseAppRoles } from './config/app-roles';
 import { sqsConfigFromEnv } from './modules/messaging/infrastructure/sqs/sqs.config';
 import { schedulerConfigFromEnv } from './modules/wagering/infrastructure/scheduler/scheduler.config';
+import { createValidationPipe } from './platform/http/validation-pipe';
 import {
   JsonLogger,
   type LogLevel,
@@ -44,6 +45,7 @@ async function bootstrap(): Promise<void> {
     { bufferLogs: true, logger: createLogger() },
   );
   app.enableShutdownHooks();
+  app.useGlobalPipes(createValidationPipe());
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Wagering Processor API')

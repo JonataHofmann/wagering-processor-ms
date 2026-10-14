@@ -7,13 +7,14 @@ import {
 import { WalletView } from '@/src/modules/wallet/application/use-cases/wallet-view';
 import { ApiErrorResponseDto } from '@/src/platform/http/dto/api-error-response.dto';
 import { CreateWalletRequestDto } from '@/src/modules/wallet/presentation/dto/create-wallet.request.dto';
+import {
+  DEFAULT_PAGE_SIZE,
+  ListLedgerQueryDto,
+  MAX_PAGE_SIZE,
+} from '@/src/modules/wallet/presentation/dto/list-ledger.query.dto';
 import { LedgerPageDto } from '@/src/modules/wallet/presentation/dto/ledger-page.response.dto';
 import { WalletReconciliationDto } from '@/src/modules/wallet/presentation/dto/wallet-reconciliation.response.dto';
 import { WalletViewDto } from '@/src/modules/wallet/presentation/dto/wallet-view.response.dto';
-import {
-  RequestParser,
-  parseUuidParam,
-} from '@/src/platform/http/request-parsing';
 import {
   Body,
   Controller,
@@ -21,6 +22,7 @@ import {
   Headers,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
 } from '@nestjs/common';
@@ -38,8 +40,6 @@ import {
   ReconcileWalletsUseCase,
   type WalletReconciliation,
 } from '@/src/modules/wallet/application/use-cases/reconcile-wallets.use-case';
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
 
 @ApiTags('wallets')
 @Controller('wallets')
@@ -70,11 +70,9 @@ export class WalletsController {
     type: ApiErrorResponseDto,
   })
   async reconcile(
-    @Param('walletId') walletId: string,
+    @Param('walletId', ParseUUIDPipe) walletId: string,
   ): Promise<WalletReconciliation> {
-    return this.reconcileWallets.reconcile(
-      parseUuidParam('walletId', walletId),
-    );
+    return this.reconcileWallets.reconcile(walletId);
   }
 
   @Post()
@@ -98,21 +96,15 @@ export class WalletsController {
     type: ApiErrorResponseDto,
   })
   async create(
-    @Body() body: unknown,
+    @Body() body: CreateWalletRequestDto,
     @Headers('x-correlation-id') correlationId: string | undefined,
   ): Promise<WalletView> {
-    const parser = new RequestParser(body);
-    parser.requireObject('');
-    const playerId = parser.uuid('playerId');
-    parser.requireObject('initialBalance');
-    // o formato do valor é validado pelo Money (INVALID_AMOUNT / INVALID_CURRENCY)
-    const amount = parser.string('initialBalance.amount');
-    const currency = parser.string('initialBalance.currency');
-    parser.assertValid();
-
     return this.createWallet.execute({
-      playerId: playerId!,
-      initialBalance: { amount: amount!, currency: currency! },
+      playerId: body.playerId,
+      initialBalance: {
+        amount: body.initialBalance.amount,
+        currency: body.initialBalance.currency,
+      },
       correlationId: correlationId ?? crypto.randomUUID(),
     });
   }
@@ -126,8 +118,10 @@ export class WalletsController {
     description: 'Wallet não encontrada',
     type: ApiErrorResponseDto,
   })
-  async get(@Param('walletId') walletId: string): Promise<WalletView> {
-    return this.getWallet.execute(parseUuidParam('walletId', walletId));
+  async get(
+    @Param('walletId', ParseUUIDPipe) walletId: string,
+  ): Promise<WalletView> {
+    return this.getWallet.execute(walletId);
   }
 
   @Get(':walletId/ledger')
@@ -146,19 +140,13 @@ export class WalletsController {
     type: ApiErrorResponseDto,
   })
   async ledger(
-    @Param('walletId') walletId: string,
-    @Query() query: Record<string, unknown>,
+    @Param('walletId', ParseUUIDPipe) walletId: string,
+    @Query() query: ListLedgerQueryDto,
   ): Promise<LedgerPage> {
-    const id = parseUuidParam('walletId', walletId);
-    const parser = new RequestParser(query);
-    const cursor = parser.string('cursor', { required: false, maxLength: 200 });
-    const limit = parser.integer('limit', {
-      min: 1,
-      max: MAX_PAGE_SIZE,
-      default: DEFAULT_PAGE_SIZE,
+    return this.listLedger.execute({
+      walletId,
+      cursor: query.cursor,
+      limit: query.limit,
     });
-    parser.assertValid();
-
-    return this.listLedger.execute({ walletId: id, cursor, limit });
   }
 }

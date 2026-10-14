@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import 'reflect-metadata';
 import { AppModule, type AppOptions } from '../../src/app.module';
+import { createValidationPipe } from '../../src/platform/http/validation-pipe';
 import { createIsolatedDatabase, type IsolatedDatabase } from './database';
 
 export interface TestApp {
@@ -34,6 +35,7 @@ export async function startTestApp(
     }),
     { logger: process.env.APP_LOGS === 'true' ? undefined : false },
   );
+  app.useGlobalPipes(createValidationPipe());
   await app.listen(0);
   const { port } = app.getHttpServer().address() as { port: number };
   const baseUrl = `http://127.0.0.1:${port}`;
