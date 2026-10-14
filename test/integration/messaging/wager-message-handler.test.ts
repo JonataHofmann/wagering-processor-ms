@@ -1,4 +1,5 @@
 import { WagerMessageHandler } from '@/src/modules/wagering/infrastructure/sqs/wager-message.handler';
+import { METRICS, type Metrics } from '@/src/platform/observability/metrics';
 import { startTestApp, type TestApp } from '@/test/support/http-app';
 import { walletsInconsistentWithLedger } from '@/test/support/invariants';
 import {
@@ -13,6 +14,7 @@ let t: TestApp;
 let p: Persistence;
 let handler: WagerMessageHandler;
 let api: ReturnType<typeof walletClient>;
+let metrics: Metrics;
 
 beforeAll(async () => {
   t = await startTestApp();
@@ -20,6 +22,7 @@ beforeAll(async () => {
   api = walletClient(t.request);
   // o MESMO handler que a aplicação usa (caso de uso, transação, inbox, métricas)
   handler = t.app.get(WagerMessageHandler);
+  metrics = t.app.get<Metrics>(METRICS);
 });
 
 afterAll(async () => {
@@ -128,6 +131,9 @@ describe('deduplicação', () => {
   test('a mesma mensagem reentregue: ack como duplicata, sem segundo efeito', async () => {
     const w = await newWallet('100.00');
     const raw = JSON.stringify(message(w));
+    const before = metrics.value('wagering_duplicates_detected_total', {
+      source: 'inbox_message',
+    });
 
     expect(await handler.handle(raw)).toMatchObject({
       action: 'ack',
@@ -138,6 +144,11 @@ describe('deduplicação', () => {
       reason: 'duplicate',
     });
     expect(await api.balanceOf(w)).toEqual({ amount: '75.00', version: 2 });
+    expect(
+      metrics.value('wagering_duplicates_detected_total', {
+        source: 'inbox_message',
+      }),
+    ).toBe(before + 1);
   });
 
   test('reentregas simultâneas da mesma mensagem: um único efeito', async () => {
@@ -271,12 +282,18 @@ describe('falha transitória', () => {
     });
     await lockTaken;
 
+    const lockConflictsBefore = metrics.value('database_lock_conflicts_total', {
+      sql_state: '55P03',
+    });
     const disposition = await handler.handle(JSON.stringify(msg));
     release();
     await holder;
 
     expect(disposition.action).toBe('retry');
     expect(await inboxCount(msg.messageId)).toBe(0); // a inbox foi desfeita junto com o resto
+    expect(
+      metrics.value('database_lock_conflicts_total', { sql_state: '55P03' }),
+    ).toBe(lockConflictsBefore + 1);
 
     // a reentrega posterior processa normalmente
     expect(await handler.handle(JSON.stringify(msg))).toMatchObject({

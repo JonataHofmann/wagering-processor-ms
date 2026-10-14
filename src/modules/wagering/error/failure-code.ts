@@ -2,6 +2,12 @@ export const FailureCode = {
   InsufficientFunds: 'INSUFFICIENT_FUNDS',
   ReversalInsufficientFunds: 'REVERSAL_INSUFFICIENT_FUNDS',
   CurrencyMismatch: 'CURRENCY_MISMATCH',
+  /**
+   * NUNCA aparece em WagerTransaction.failureCode: wallet inexistente corta o fluxo
+   * em ResourceNotFoundError (404) antes de qualquer WagerTransaction ser criada —
+   * não há transação pra persistir o código. Existe aqui só para completar a
+   * taxonomia documentada ao provedor (ver ARCHITECTURE.md §6.9, "não persistido").
+   */
   WalletNotFound: 'WALLET_NOT_FOUND',
   WalletPlayerMismatch: 'WALLET_PLAYER_MISMATCH',
   ReferenceNotFound: 'REFERENCE_NOT_FOUND',
@@ -47,9 +53,11 @@ export const FAILURE_CODES: Readonly<Record<FailureCode, FailureCodeInfo>> = {
     description: 'Moeda da operação diferente da moeda da wallet',
   },
   WALLET_NOT_FOUND: {
+    // status nominal: na prática vira HTTP 404 antes de existir uma transação
+    // persistida com este failureCode (ver comentário em WalletNotFound acima).
     status: 'REJECTED',
     providerAction: 'FIX_PAYLOAD',
-    description: 'Wallet inexistente',
+    description: 'Wallet inexistente (nunca persistido: resulta em HTTP 404)',
   },
   WALLET_PLAYER_MISMATCH: {
     status: 'REJECTED',

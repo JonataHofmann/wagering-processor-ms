@@ -1,4 +1,5 @@
 import type { AppRole } from '@/src/config/app-roles';
+import { METRICS, type Metrics } from '@/src/platform/observability/metrics';
 import { startTestApp, type TestApp } from '@/test/support/http-app';
 import { walletsInconsistentWithLedger } from '@/test/support/invariants';
 import {
@@ -14,6 +15,7 @@ let queues: TestQueues;
 let t: TestApp;
 let p: Persistence;
 let api: ReturnType<typeof walletClient>;
+let metrics: Metrics;
 
 beforeAll(async () => {
   queues = await createTestQueues({ maxReceiveCount: 3 });
@@ -23,6 +25,7 @@ beforeAll(async () => {
   });
   p = await connectPersistence(t.db);
   api = walletClient(t.request);
+  metrics = t.app.get<Metrics>(METRICS);
 }, 30_000);
 
 afterAll(async () => {
@@ -92,6 +95,19 @@ describe('consumer SQS ponta a ponta', () => {
     );
     await queueDrained();
     expect(await api.balanceOf(w)).toEqual({ amount: '75.00', version: 2 });
+
+    // histograma de duração de processamento populado de verdade pelo loop real do consumer
+    const processed = metrics
+      .snapshot()
+      .find(
+        (s) =>
+          s.kind === 'histogram' &&
+          s.name === 'sqs_message_processing_duration_seconds',
+      );
+    expect(processed).toBeDefined();
+    expect(
+      processed && 'count' in processed ? processed.count : 0,
+    ).toBeGreaterThan(0);
   });
 
   test('a mesma mensagem enviada duas vezes: um único efeito, as duas apagadas', async () => {
@@ -156,6 +172,10 @@ describe('consumer SQS ponta a ponta', () => {
   });
 
   test('mensagem inválida: vai direto para a DLQ com o motivo, sem retry', async () => {
+    const dlqBefore = metrics.value('sqs_dead_letter_messages_total', {
+      queue: queues.config.queues.wagerTransactions,
+      reason: 'INVALID_MESSAGE',
+    });
     await queues.send('{"isto nao e": ', { groupId: 'invalid' });
 
     await waitFor(
@@ -166,6 +186,15 @@ describe('consumer SQS ponta a ponta', () => {
     expect(dead!.attributes['dlq-reason']?.StringValue).toBe('INVALID_MESSAGE');
     expect(dead!.attributes['receive-count']?.StringValue).toBe('1'); // primeira tentativa: sem retry
     await queueDrained();
+    // >= (não ===): SQS é at-least-once de verdade — sob carga, a mesma mensagem
+    // pode ser recebida mais de uma vez antes do delete, e cada entrega gera seu
+    // próprio dead-letter corretamente (não é bug, é o modelo de entrega do SQS).
+    expect(
+      metrics.value('sqs_dead_letter_messages_total', {
+        queue: queues.config.queues.wagerTransactions,
+        reason: 'INVALID_MESSAGE',
+      }),
+    ).toBeGreaterThanOrEqual(dlqBefore + 1);
   });
 
   test('falha transitória: a mensagem volta para a fila e é processada quando a wallet é liberada', async () => {
@@ -187,9 +216,17 @@ describe('consumer SQS ponta a ponta', () => {
     });
     await lockTaken;
 
+    const retriesBefore = metrics.value('sqs_message_retries_total', {
+      queue: queues.config.queues.wagerTransactions,
+    });
     await queues.send(msg, { groupId: w.walletId });
     await Bun.sleep(2_500); // a primeira tentativa estoura o lock_timeout (2 s) → retry
     expect(await transactionStatus(msg.data.idempotencyKey)).toBeUndefined();
+    expect(
+      metrics.value('sqs_message_retries_total', {
+        queue: queues.config.queues.wagerTransactions,
+      }),
+    ).toBeGreaterThan(retriesBefore);
 
     release();
     await holder;

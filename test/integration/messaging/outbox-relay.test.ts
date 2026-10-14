@@ -3,6 +3,7 @@ import {
   type OutboxRelayOptions,
 } from '@/src/modules/messaging/application/use-cases/outbox-relay';
 import { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
+import { InMemoryMetrics } from '@/src/platform/observability/metrics';
 import { ExponentialBackoff } from '@/src/shared/domain/backoff';
 import { IntegrationEvent } from '@/src/shared/domain/integration-event';
 import {
@@ -128,6 +129,14 @@ describe('publicação', () => {
     expect(publisher.published[0]!.payload).toEqual(
       m!.payload as Record<string, unknown>,
     );
+  });
+
+  test('registra outbox_publish_lag_seconds (gauge) depois de publicar', async () => {
+    const metrics = new InMemoryMetrics();
+    await enqueue(3); // occurredAt no passado: lag > 0 ao publicar agora
+    await relay({ metrics }).relayOnce();
+
+    expect(metrics.value('outbox_publish_lag_seconds')).toBeGreaterThan(0);
   });
 });
 
