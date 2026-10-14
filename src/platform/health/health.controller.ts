@@ -99,7 +99,7 @@ export class HealthController {
 
   private async checkSqs(): Promise<CheckResult> {
     if (this.sqsClient === undefined || this.sqsConfig === undefined) {
-      // instância sem papel que use fila (ex.: só "api" sem SQS configurado)
+      // instância sem SQS configurado
       return { ok: true, detail: 'skipped (SQS not configured)' };
     }
     try {

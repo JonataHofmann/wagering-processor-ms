@@ -22,7 +22,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 
 /**
  * Carga mista contínua (HTTP e fila, em ordem e fora de ordem, com mensagens duplicadas)
- * sobre 3 instâncias com todos os papéis, enquanto instâncias são derrubadas e reerguidas:
+ * sobre 3 instâncias (toda instância faz tudo), enquanto instâncias são derrubadas e reerguidas:
  *   - uma morta com SIGKILL e substituída;
  *   - uma encerrada com SIGTERM e substituída;
  *   - o serviço INTEIRO morto com SIGKILL e reiniciado.

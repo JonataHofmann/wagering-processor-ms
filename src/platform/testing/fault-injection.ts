@@ -9,7 +9,7 @@ export type FaultPoint =
   | 'crash-after-commit-before-ack' // consumer SQS: commit feito, ack não
   | 'crash-after-claim-before-publish' // relay: lote reservado, nada publicado
   | 'crash-after-publish-before-mark' // relay: publicado no broker, não marcado na outbox
-  | 'crash-after-claim-before-resolve'; // relay: publicado no broker, não marcado na outbox
+  | 'crash-after-claim-before-resolve'; // scheduler: pendência reservada (lease), não resolvida
 
 export function faultPoint(point: FaultPoint): void {
   if (process.env.FAULT_INJECTION !== point) return;

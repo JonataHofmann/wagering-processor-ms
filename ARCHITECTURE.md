@@ -73,7 +73,7 @@ SQS ──────────────▶  │  toda réplica faz tudo: 
 
 ### ADR-001 — Monólito modular com N réplicas stateless
 
-**Status:** VALIDAR
+**Status:** Aceito
 
 **Contexto.** Saldo, ledger, transação, inbox e outbox precisam mudar atomicamente. O domínio tem um único bounded context transacional: a wallet.
 
@@ -151,7 +151,14 @@ SQS ──────────────▶  │  toda réplica faz tudo: 
 
 Os triggers **nunca escrevem dados**. Um erro `WL00x` em produção indica bug, não regra de negócio.
 
-Detalhes na seção 5.
+| Código  | Trigger / função                                                  | Dispara quando                                                                                    |
+| ------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `WL001` | `trg_ledger_no_update_delete`, `trg_ledger_no_truncate` (`fn_ledger_append_only`) | `UPDATE`, `DELETE` ou `TRUNCATE` em `wallet_ledger_entries` — o ledger é append-only, nem o owner altera |
+| `WL002` | `trg_wallets_ledger_consistency`, `trg_ledger_transaction_consistency`, `trg_wtx_ledger_consistency` (constraint triggers, deferidos ao COMMIT) | Saldo/versão da wallet muda sem lançamento correspondente (ou o inverso); lançamento com valor, moeda, wallet ou direção que não batem com sua transação; transação `PROCESSED` sem lançamento (ou o inverso) |
+| `WL003` | `trg_wtx_guard` (`fn_wtx_guard`)                                    | `DELETE` em `wager_transactions`; `UPDATE` de uma transação já terminal (`PROCESSED`/`REJECTED`/`FAILED`); volta de `PENDING_REFERENCE` para `PENDING`; alteração de qualquer coluna fora do conjunto que o fluxo de pendência pode mudar (`status`, `failure_code`, `balance_snapshot`, `attempts`, `next_attempt_at`, `expires_at`, `reference_transaction_id`, `updated_at`, `processed_at`) |
+| `WL004` | `trg_wallets_immutable` (`fn_wallet_immutable_fields`)              | `UPDATE` que muda `id`, `player_id`, `currency` ou `created_at` de uma wallet                        |
+
+**Por que `UNIQUE (id, currency)` em `wallets`, além da chave primária em `id`.** Existe só para ser o alvo de uma foreign key composta: `wallet_ledger_entries` referencia `wallets (id, currency)` via `fk_ledger_wallet_currency`, não só `wallet_id → wallets(id)`. Com FK simples o banco aceitaria um lançamento em USD numa wallet BRL; a FK composta torna isso irrepresentável. Alternativas descartadas: não guardar `currency` no ledger (o lançamento deixaria de ser autossuficiente, exigiria JOIN com `wallets` para reconstruir o `Money` ou auditar isoladamente) e validar a moeda por trigger (código procedural para algo que uma FK declarativa já resolve, mais simples e mais rápida).
 
 **Interpretação adotada.** Uma referência só pode ser revertida **uma vez no total**, por REFUND ou ROLLBACK. A leitura literal ("uma vez por tipo de operação") permitiria REFUND seguido de ROLLBACK da mesma BET, creditando o valor duas vezes e violando a invariante global de não duplicar créditos.
 
@@ -159,7 +166,7 @@ Detalhes na seção 5.
 
 ### ADR-006 — Dois roles no banco (menor privilégio)
 
-**Status:** REVISAR
+**Status:** Aceito
 
 **Contexto.** O `POSTGRES_USER` da imagem é superusuário e ignora GRANTs.
 
@@ -169,6 +176,13 @@ Detalhes na seção 5.
 - `wagering_app`: único role usado em runtime (`DATABASE_URL`), criado por `docker/postgres/init/01-roles.sql` sem privilégios; recebe só o necessário na migration 4.
 - O role é criado no init do container (é do cluster, não do banco); as permissões por tabela ficam na migration (dependem das tabelas).
 - Sem `ALTER DEFAULT PRIVILEGES`: cada tabela nova recebe GRANT explícito.
+- Permissão não é igual em todas as tabelas — cada uma recebe só o verbo que seu papel exige:
+
+| Tabela                                              | Permissões                      | Por quê                                                              |
+| ---------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------- |
+| `wallets`, `wager_transactions`, `inbox_messages`    | `SELECT`, `INSERT`, `UPDATE`     | Tabelas operacionais: mudam de estado, mas uma linha nunca é apagada |
+| `outbox_messages`                                    | `SELECT`, `INSERT`, `UPDATE`, `DELETE` | Evento já publicado pode ser limpo                                   |
+| `wallet_ledger_entries`                              | `SELECT`, `INSERT`               | Ledger é append-only: `wagering_app` não tem `UPDATE` nem `DELETE` — a permissão em si já impede alteração, mesmo antes do trigger `WL001` entrar em ação |
 
 **Consequências.** O ledger fica protegido por duas camadas independentes: permissão (`42501`) e trigger (`WL001`).
 
@@ -488,23 +502,25 @@ Idempotency-Key, correlationId, messageId e qualquer metadado de transporte.
 **Decisão.**
 
 - A aplicação não guarda estado de negócio em memória: idempotência, lock e saldo vivem no
-  PostgreSQL. Qualquer réplica atende qualquer requisição, inclusive o replay de uma
+  PostgreSQL. Qualquer instância atende qualquer requisição, inclusive o replay de uma
   operação processada por outra.
-- Imagem Docker em dois estágios (dependências de produção + runtime), Bun em versão fixa,
-  usuário sem privilégios.
-- Docker Compose: `migrator` aplica as migrations uma vez e encerra; três réplicas
-  (`app-1`..`app-3`) só sobem depois dele; nginx faz rodízio simples, sem afinidade de sessão.
-- O nginx não reenvia POST para outra réplica: o reenvio é decisão do cliente,
-  protegido pela Idempotency-Key.
+- "Múltiplas instâncias" aqui é vários processos `bun src/main.ts` apontando para o mesmo
+  `DATABASE_URL`, cada um em sua porta — não há Dockerfile, imagem nem orquestração (nginx,
+  `docker compose`) para a aplicação neste repositório; o `docker-compose.yaml` existente
+  só sobe PostgreSQL e LocalStack.
+- Sem balanceador, não há reenvio automático entre instâncias: o reenvio para outra em caso
+  de falha é decisão do cliente, protegido pela Idempotency-Key.
 
-**Verificação.** `test/concurrency/multi-instance.test.ts` sobe três processos
-`bun src/main.ts` separados (cada um com seu pool), sobre o mesmo banco isolado, e repete
-as corridas distribuindo as requisições em rodízio: 100/80/80, a mesma aposta 60 vezes,
-30 apostas disputando o saldo, REFUNDs simultâneos, criação simultânea da mesma wallet,
-wallets independentes e replay por instância diferente da que processou.
+**Verificação.** `test/concurrency/multi-instance.test.ts` e `test/resilience/restart-consistency.test.ts`
+sobem três processos `bun src/main.ts` separados (cada um com seu pool), via
+`test/support/app-process.ts`, sobre o mesmo banco isolado, e repetem as corridas distribuindo
+as requisições em rodízio: 100/80/80, a mesma aposta 60 vezes, 30 apostas disputando o saldo,
+REFUNDs simultâneos, criação simultânea da mesma wallet, wallets independentes e replay por
+instância diferente da que processou.
 
-**Consequências.** Escalar a API é aumentar réplicas. O limite passa a ser o PostgreSQL
-primário e, por wallet, o lock de linha (ADR-010).
+**Consequências.** Escalar a API é subir mais processos. O limite passa a ser o PostgreSQL
+primário e, por wallet, o lock de linha (ADR-010). Empacotamento em imagem e orquestração de
+deploy (Docker, load balancer) ficam fora do escopo implementado.
 
 ### ADR-013 — Consumer SQS: inbox transacional, ack após o commit e classificação de erros
 

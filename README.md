@@ -16,7 +16,7 @@ As decisões de arquitetura, alternativas e trade-offs estão em [ARCHITECTURE.m
 4. [Arquitetura em um minuto](#arquitetura-em-um-minuto)
 5. [Pré-requisitos](#pré-requisitos)
 6. [Início rápido](#início-rápido)
-7. [Rodando com 3 réplicas](#rodando-com-3-réplicas)
+7. [Rodando com várias instâncias](#rodando-com-várias-instâncias)
 8. [Configuração](#configuração)
 9. [API HTTP](#api-http)
 10. [Entrada pela fila SQS](#entrada-pela-fila-sqs)
@@ -72,7 +72,7 @@ As decisões de arquitetura, alternativas e trade-offs estão em [ARCHITECTURE.m
 | Componente     | Versão                                                     |
 | -------------- | ---------------------------------------------------------- |
 | Runtime        | Bun 1.4                                                    |
-| Framework HTTP | NestJS 11                                                  |
+| Framework HTTP | NestJS 12                                                  |
 | ORM            | MikroORM 7 (escrita explícita, sem Unit of Work implícito) |
 | Banco          | PostgreSQL 16                                              |
 | Fila           | Amazon SQS (FIFO); localmente, LocalStack 3.8              |
@@ -109,7 +109,7 @@ As decisões de arquitetura, alternativas e trade-offs estão em [ARCHITECTURE.m
 | Docker e Docker Compose | Compose v2 (`docker compose version`) |
 | Git                     | qualquer versão recente               |
 
-Portas usadas localmente: `5432` (PostgreSQL), `4566` (LocalStack), `3000` (aplicação ou balanceador), `3001`–`3003` (réplicas, no modo de 3 réplicas).
+Portas usadas localmente: `5432` (PostgreSQL), `4566` (LocalStack), `3000` (aplicação).
 
 ---
 
@@ -173,27 +173,17 @@ Repita o mesmo comando: a resposta é idêntica, com `"idempotentReplay": true`,
 
 ---
 
-## Rodando com 3 réplicas
+## Rodando com várias instâncias
 
-O Docker Compose também sobe a aplicação como em produção: um serviço de migrations, três réplicas e um nginx na frente.
-
-```bash
-bun run stack:up      # build da imagem, migrations, app-1..3 e balanceador
-docker compose ps     # migrator "Exited (0)"; app-1..3 "healthy"; lb em execução
-```
-
-| Endereço                         | Destino                            |
-| -------------------------------- | ---------------------------------- |
-| `localhost:3000`                 | nginx, rodízio entre as 3 réplicas |
-| `localhost:3001`, `3002`, `3003` | cada réplica diretamente           |
-
-Pare o `bun run dev` antes: ele também usa a porta 3000.
-
-As réplicas não guardam estado em memória, então não há afinidade de sessão: qualquer réplica atende qualquer requisição, inclusive o replay de uma operação processada por outra. O nginx não reenvia `POST` para outra réplica; o reenvio é decisão do cliente, protegido pela `Idempotency-Key`.
+Não há Docker Compose nem load balancer para a aplicação neste repositório — `docker-compose.yaml` só sobe PostgreSQL e LocalStack (seção [Início rápido](#início-rápido)). "Várias instâncias" aqui significa vários processos `bun src/main.ts` apontando para o **mesmo** `DATABASE_URL`, cada um numa porta diferente:
 
 ```bash
-bun run stack:down    # derruba tudo e apaga os volumes
+PORT=3001 bun src/main.ts &
+PORT=3002 bun src/main.ts &
+PORT=3003 bun src/main.ts &
 ```
+
+Nenhuma instância guarda estado de negócio em memória, então não há afinidade de sessão: qualquer uma atende qualquer requisição, inclusive o replay de uma operação processada por outra. Sem balanceador, o cliente é quem escolhe a instância e quem decide reenviar a outra em caso de falha, protegido pela `Idempotency-Key` — é exatamente o padrão que `test/concurrency/multi-instance.test.ts` e `test/resilience/restart-consistency.test.ts` exercitam, via `test/support/app-process.ts`.
 
 ---
 
@@ -209,6 +199,8 @@ O Bun carrega o `.env` automaticamente. O `.env.example` traz todos os valores p
 | `DATABASE_URL`           | —                              | Conexão de runtime, com o role `wagering_app` (sem `UPDATE`/`DELETE` no ledger) |
 | `DATABASE_MIGRATION_URL` | —                              | Conexão das migrations, com o role `wagering_owner`                             |
 | `MIKRO_ORM_DEBUG`        | `false`                        | `true` imprime cada query                                                       |
+| `LOG_LEVEL`              | `info`                         | `fatal` \| `error` \| `warn` \| `info` \| `debug` \| `trace`                    |
+| `LOG_FORMAT`             | `json`                         | `json` (estruturado) ou `text`                                                  |
 
 ### SQS
 
@@ -559,6 +551,7 @@ Se a referência ainda não existe (ou existe, mas ela própria está pendente),
 | `REFERENCE_NOT_PROCESSED`     | A referência foi rejeitada                                     | Não reenviar       |
 | `REFERENCE_ALREADY_REVERSED`  | A referência já tem uma reversão                               | Não reenviar       |
 | `AMOUNT_MISMATCH`             | Valor da reversão diferente da referência                      | Corrigir o payload |
+| `INFRA_RETRIES_EXHAUSTED`     | Falha permanente de infraestrutura após esgotar as tentativas  | Reenviar depois    |
 
 ---
 
@@ -700,8 +693,7 @@ src/
 
 scripts/
 ├── migrate.ts                   up | down | status | create
-├── reconcile.ts                 reconciliação de todas as wallets
-└── checks/sql/                  roteiros manuais de verificação do schema
+└── reconcile.ts                 reconciliação de todas as wallets
 
 test/
 ├── unit/                        domínio puro
@@ -712,8 +704,7 @@ test/
 
 docker/
 ├── postgres/init/01-roles.sql   role de runtime (wagering_app)
-├── localstack/init-sqs.sh       filas FIFO, DLQ e redrive policy
-└── nginx/nginx.conf             balanceador das 3 réplicas
+└── localstack/init-sqs.sh       filas FIFO, DLQ e redrive policy
 ```
 
 Cada módulo segue a mesma divisão: `domain` (regras puras, sem framework), `application` (casos de uso e portas) e `infrastructure` (adaptadores: HTTP, SQS, PostgreSQL).
@@ -729,7 +720,7 @@ Cada módulo segue a mesma divisão: `domain` (regras puras, sem framework), `ap
 | LocalStack nunca fica healthy                             | O `init-sqs.sh` falhou (permissão ou CRLF)        | `chmod +x docker/localstack/init-sqs.sh`; salvar com quebra de linha LF  |
 | LocalStack pede token                                     | Imagens recentes exigem conta                     | Manter a versão fixa `3.8` ou usar MiniStack                             |
 | `permission denied for table ...` na aplicação            | Migration nova sem `GRANT`                        | Acrescentar o `GRANT` na migration                                       |
-| `EADDRINUSE :3000`                                        | `bun run dev` e `stack:up` ao mesmo tempo         | Parar um dos dois                                                        |
+| `EADDRINUSE :3000`                                        | Duas instâncias na mesma porta                    | Rodar a segunda com `PORT=3001 bun src/main.ts` (ou similar)             |
 | Respostas 503 sob carga numa mesma wallet                 | Espera pelo lock além de 2 s                      | Esperado: reenviar a mesma requisição; ver as limitações abaixo          |
 | Logs `[query] ...` em todo lugar                          | `MIKRO_ORM_DEBUG=true` no `.env`                  | Remover a linha ou usar `false`                                          |
 | `app process exited early` nos testes multi-processo      | O processo filho falhou no boot                   | `APP_PROCESS_LOGS=true` mostra o motivo                                  |
