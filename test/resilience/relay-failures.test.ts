@@ -6,8 +6,10 @@ import {
 import { startTestApp, type TestApp } from '@/test/support/http-app';
 import { queryOnce } from '@/test/support/pg';
 import {
+  consumerEnv,
   createTestQueues,
   relayEnv,
+  schedulerEnv,
   type TestQueues,
   waitFor,
 } from '@/test/support/sqs';
@@ -28,6 +30,24 @@ let db: IsolatedDatabase;
 let apiApp: TestApp;
 let api: ReturnType<typeof walletClient>;
 const cleanup: Array<() => Promise<unknown>> = [];
+
+/**
+ * Env de um processo real dedicado ao relay: isola a fila de entrada (o consumer dessa
+ * instância roda sempre, sem papel pra desligá-lo) e deixa o scheduler praticamente parado
+ * (idleIntervalMs gigante) — sem isso, o scheduler consulta wager_transactions a cada 500 ms
+ * em cada processo, disputando conexão/CPU com as duas chamadas HTTP sequenciais de
+ * walletWithBet() e alargando a janela em que o relay pode reservar um lote parcial.
+ */
+function relayProcessEnv(
+  queues: TestQueues,
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  return {
+    ...consumerEnv(queues),
+    ...relayEnv(queues, extra),
+    ...schedulerEnv({ SCHEDULER_IDLE_INTERVAL_MS: '3600000' }),
+  };
+}
 
 beforeAll(async () => {
   db = await createIsolatedDatabase();
@@ -98,12 +118,19 @@ describe('recuperação do relay', () => {
   test('commit confirmado, relay morre antes de publicar: outra instância assume e publica', async () => {
     const queues: TestQueues = track(await createTestQueues());
 
-    // o relay sobe com a outbox vazia (passa no health check) e fica esperando trabalho
+    // o relay sobe com a outbox vazia (passa no health check) e fica esperando trabalho.
+    // OUTBOX_IDLE_INTERVAL_MS alto (1.5 s) é proposital: abertura e aposta, em walletWithBet(),
+    // são 2 transações HTTP sequenciais, não uma só — um idle curto deixaria o relay arriscar
+    // pegar o 1º poll bem no meio das duas, reservando só metade do lote (2 de 4 eventos) e
+    // morrendo com o resto órfão (criado só depois, sem ninguém pra reservar). Um idle bem
+    // maior que o tempo das 2 chamadas garante que a 2ª rodada (não a 1ª, que acha a outbox
+    // ainda vazia) sempre encontra o lote inteiro já commitado.
     const doomed = track(
       await startAppProcess(
         db.appUrl,
-        relayEnv(queues, {
+        relayProcessEnv(queues, {
           FAULT_INJECTION: 'crash-after-claim-before-publish',
+          OUTBOX_IDLE_INTERVAL_MS: '1500',
         }),
       ),
     );
@@ -122,7 +149,9 @@ describe('recuperação do relay', () => {
     expect(eventIdsOf(await queues.drainEvents(), [w.walletId]).size).toBe(0); // nada chegou ao broker
 
     // 3. outra instância assume quando o lease (2 s) vence, e 4. publica
-    const survivor = track(await startAppProcess(db.appUrl, relayEnv(queues)));
+    const survivor = track(
+      await startAppProcess(db.appUrl, relayProcessEnv(queues)),
+    );
     await waitFor(
       async () =>
         (await outboxOf([w.walletId])).every((r) => r.published_at !== null),
@@ -142,8 +171,9 @@ describe('recuperação do relay', () => {
     const doomed = track(
       await startAppProcess(
         db.appUrl,
-        relayEnv(queues, {
+        relayProcessEnv(queues, {
           FAULT_INJECTION: 'crash-after-publish-before-mark',
+          OUTBOX_IDLE_INTERVAL_MS: '1500', // ver comentário no teste anterior
         }),
       ),
     );
@@ -155,7 +185,9 @@ describe('recuperação do relay', () => {
       (await outboxOf([w.walletId])).every((r) => r.published_at === null),
     ).toBe(true); // publicou, não marcou
 
-    const survivor = track(await startAppProcess(db.appUrl, relayEnv(queues)));
+    const survivor = track(
+      await startAppProcess(db.appUrl, relayProcessEnv(queues)),
+    );
     await waitFor(
       async () =>
         (await outboxOf([w.walletId])).every((r) => r.published_at !== null),
@@ -184,7 +216,7 @@ describe('recuperação do relay', () => {
 
     const relays = await Promise.all(
       Array.from({ length: 3 }, () =>
-        startAppProcess(db.appUrl, relayEnv(queues)),
+        startAppProcess(db.appUrl, relayProcessEnv(queues)),
       ),
     );
     relays.forEach((r) => track(r));

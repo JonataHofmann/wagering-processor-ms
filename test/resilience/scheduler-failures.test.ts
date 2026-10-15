@@ -6,7 +6,14 @@ import {
 import { startTestApp, type TestApp } from '@/test/support/http-app';
 import { walletsInconsistentWithLedger } from '@/test/support/invariants';
 import { queryOnce } from '@/test/support/pg';
-import { schedulerEnv, waitFor } from '@/test/support/sqs';
+import {
+  consumerEnv,
+  createTestQueues,
+  relayEnv,
+  schedulerEnv,
+  type TestQueues,
+  waitFor,
+} from '@/test/support/sqs';
 import { type TestWallet, walletClient } from '@/test/support/wagering-client';
 import {
   afterAll,
@@ -18,6 +25,9 @@ import {
 } from 'bun:test';
 
 let db: IsolatedDatabase;
+// isola a fila: todo processo real agora roda consumer e relay sempre (sem papel pra
+// desligá-los), e sem isso eles ficariam de olho na fila REAL de desenvolvimento
+let queues: TestQueues;
 // app EM PROCESSO: cria as pendências e as referências via HTTP, mas nunca as
 // resolve — sem gate natural tipo "SQS ausente" pro scheduler (ele sempre liga),
 // então o idleIntervalMs gigante o deixa inerte depois da 1ª rodada (vazia, no
@@ -29,6 +39,7 @@ const cleanup: Array<() => Promise<unknown>> = [];
 
 beforeAll(async () => {
   db = await createIsolatedDatabase();
+  queues = await createTestQueues();
   apiApp = await startTestApp(
     {
       referenceLookup: { backoffBaseMs: 5_000, backoffMaxMs: 60_000, ttlMs: 900_000 },
@@ -43,6 +54,7 @@ afterAll(async () => {
   for (const step of cleanup.reverse()) await step().catch(() => undefined);
   if (db) expect(await walletsInconsistentWithLedger(db.appUrl)).toEqual([]);
   await apiApp?.close();
+  await queues?.drop();
   await db?.drop();
 }, 60_000);
 
@@ -89,10 +101,13 @@ describe('recuperação do scheduler', () => {
   test('scheduler morto depois de reservar: outra instância resolve quando a reserva vence', async () => {
     // regra da etapa 15: o processo com falha sobe ANTES de existir o trabalho que o derruba
     const doomed = track(
-      await startAppProcess(
-        db.appUrl,
-        schedulerEnv({ FAULT_INJECTION: 'crash-after-claim-before-resolve' }),
-      ),
+      await startAppProcess(db.appUrl, {
+        ...consumerEnv(queues),
+        ...relayEnv(queues),
+        ...schedulerEnv({
+          FAULT_INJECTION: 'crash-after-claim-before-resolve',
+        }),
+      }),
     );
 
     const { wallet } = await api.openWallet('100.00');
@@ -111,7 +126,13 @@ describe('recuperação do scheduler', () => {
     expect(reserved.status).toBe('PENDING_REFERENCE');
     expect(reserved.next_attempt_at!.getTime()).toBeGreaterThan(Date.now());
 
-    const survivor = track(await startAppProcess(db.appUrl, schedulerEnv()));
+    const survivor = track(
+      await startAppProcess(db.appUrl, {
+        ...consumerEnv(queues),
+        ...relayEnv(queues),
+        ...schedulerEnv(),
+      }),
+    );
     await waitFor(
       async () => (await statusOf(refundId)).status === 'PROCESSED',
       'resolved after lease',
@@ -128,7 +149,11 @@ describe('recuperação do scheduler', () => {
   test('3 schedulers em processos separados: 30 pendências, cada uma resolvida exatamente uma vez', async () => {
     const schedulers = await Promise.all(
       Array.from({ length: 3 }, () =>
-        startAppProcess(db.appUrl, schedulerEnv()),
+        startAppProcess(db.appUrl, {
+          ...consumerEnv(queues),
+          ...relayEnv(queues),
+          ...schedulerEnv(),
+        }),
       ),
     );
     schedulers.forEach(track);
