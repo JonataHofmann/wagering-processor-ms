@@ -25,10 +25,6 @@ A correção financeira é garantida pelo **PostgreSQL**, não pelo broker nem p
 | Garantias finais            | 17 a 20 (concorrência, resiliência, reconciliação)      | Concluída                  |
 | Entrega                     | 21 a 23 (observabilidade, documentação, polimento)      | Concluída, exceto o abaixo |
 
-Itens específicos ainda em aberto (não bloqueiam nenhuma garantia financeira ou de concorrência):
-
-- **Teste de carga (`bun run test:load`).** Diferencial opcional, não implementado.
-
 ---
 
 ## 2. Stack
@@ -158,7 +154,7 @@ Os triggers **nunca escrevem dados**. Um erro `WL00x` em produção indica bug, 
 | `WL003` | `trg_wtx_guard` (`fn_wtx_guard`)                                                                                                                | `DELETE` em `wager_transactions`; `UPDATE` de uma transação já terminal (`PROCESSED`/`REJECTED`/`FAILED`); volta de `PENDING_REFERENCE` para `PENDING`; alteração de qualquer coluna fora do conjunto que o fluxo de pendência pode mudar (`status`, `failure_code`, `balance_snapshot`, `attempts`, `next_attempt_at`, `expires_at`, `reference_transaction_id`, `updated_at`, `processed_at`) |
 | `WL004` | `trg_wallets_immutable` (`fn_wallet_immutable_fields`)                                                                                          | `UPDATE` que muda `id`, `player_id`, `currency` ou `created_at` de uma wallet                                                                                                                                                                                                                                                                                                                   |
 
-**Por que `UNIQUE (id, currency)` em `wallets`, além da chave primária em `id`.** Existe só para ser o alvo de uma foreign key composta: `wallet_ledger_entries` referencia `wallets (id, currency)` via `fk_ledger_wallet_currency`, não só `wallet_id → wallets(id)`. Com FK simples o banco aceitaria um lançamento em USD numa wallet BRL; a FK composta torna isso irrepresentável. Alternativas descartadas: não guardar `currency` no ledger (o lançamento deixaria de ser autossuficiente, exigiria JOIN com `wallets` para reconstruir o `Money` ou auditar isoladamente) e validar a moeda por trigger (código procedural para algo que uma FK declarativa já resolve, mais simples e mais rápida).
+**Por que** `UNIQUE (id, currency)` **em** `wallets`**, além da chave primária em** `id`**.** Existe só para ser o alvo de uma foreign key composta: `wallet_ledger_entries` referencia `wallets (id, currency)` via `fk_ledger_wallet_currency`, não só `wallet_id → wallets(id)`. Com FK simples o banco aceitaria um lançamento em USD numa wallet BRL; a FK composta torna isso irrepresentável. Alternativas descartadas: não guardar `currency` no ledger (o lançamento deixaria de ser autossuficiente, exigiria JOIN com `wallets` para reconstruir o `Money` ou auditar isoladamente) e validar a moeda por trigger (código procedural para algo que uma FK declarativa já resolve, mais simples e mais rápida).
 
 **Interpretação adotada.** Uma referência só pode ser revertida **uma vez no total**, por REFUND ou ROLLBACK. A leitura literal ("uma vez por tipo de operação") permitiria REFUND seguido de ROLLBACK da mesma BET, creditando o valor duas vezes e violando a invariante global de não duplicar créditos.
 
@@ -210,62 +206,66 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
 | HTTP         | `test/integration/http`        | PostgreSQL + aplicação Nest real | Contrato da API, status HTTP, idempotência, regras de negócio de ponta a ponta                                    |
 | Concorrência | `test/concurrency`             | PostgreSQL + aplicação Nest real | Corridas reais: serialização por wallet, idempotência sob disputa, lock timeout                                   |
 
-2. **Infraestrutura real, nunca simulada.**
-   - Testes de integração e concorrência rodam contra o PostgreSQL do Docker Compose
-     (e contra o LocalStack a partir da etapa 14).
-   - Os testes HTTP sobem a aplicação Nest completa (`AppModule.register`) numa porta livre
-     (`listen(0)`) e falam com ela por `fetch`: filtro de erros, controller, caso de uso,
-     repositórios, MikroORM, PostgreSQL e triggers, sem nada substituído.
-   - O domínio é testado sem infraestrutura porque é puro (ADR-002), não porque algo foi mockado.
+1. **Infraestrutura real, nunca simulada.**
 
-3. **Um banco isolado por suíte, copiado de um template.**
-   - `test/support/database.ts` migra `wagering_test_template` uma única vez por execução de
-     `bun test` e cria cada banco de suíte com `CREATE DATABASE wg_test_<uuid> TEMPLATE ...`
-     (milissegundos, com tabelas, triggers, domains e permissões).
-   - Cada banco é apagado no `afterAll` (`DROP DATABASE ... WITH (FORCE)`).
-   - Os testes nunca tocam o banco `wagering` de desenvolvimento.
+- Testes de integração e concorrência rodam contra o PostgreSQL do Docker Compose
+  (e contra o LocalStack a partir da etapa 14).
+- Os testes HTTP sobem a aplicação Nest completa (`AppModule.register`) numa porta livre
+  (`listen(0)`) e falam com ela por `fetch`: filtro de erros, controller, caso de uso,
+  repositórios, MikroORM, PostgreSQL e triggers, sem nada substituído.
+- O domínio é testado sem infraestrutura porque é puro (ADR-002), não porque algo foi mockado.
 
-4. **Testes conectam como a aplicação.**
-   - O MikroORM dos testes usa `wagering_app` (`TEST_DATABASE_APP_URL`), com exatamente as
-     permissões de produção. O owner só é usado onde o teste precisa provar que até ele é
-     barrado pelos triggers.
+2. **Um banco isolado por suíte, copiado de um template.**
 
-5. **Asserções por código, não por texto.**
-   - Erros do banco são comparados pelo SQLSTATE (`23505`, `23514`, `23503`, `42501`,
-     `WL001`–`WL004`) via `sqlState()`, nunca pela mensagem, que muda com versão e idioma.
-   - Erros da API são comparados por status HTTP e `error.code`.
+- `test/support/database.ts` migra `wagering_test_template` uma única vez por execução de
+  `bun test` e cria cada banco de suíte com `CREATE DATABASE wg_test_<uuid> TEMPLATE ...`
+  (milissegundos, com tabelas, triggers, domains e permissões).
+- Cada banco é apagado no `afterAll` (`DROP DATABASE ... WITH (FORCE)`).
+- Os testes nunca tocam o banco `wagering` de desenvolvimento.
 
-6. **Cada teste de constraint viola uma única regra.**
+3. **Testes conectam como a aplicação.**
+
+- O MikroORM dos testes usa `wagering_app` (`TEST_DATABASE_APP_URL`), com exatamente as
+  permissões de produção. O owner só é usado onde o teste precisa provar que até ele é
+  barrado pelos triggers.
+
+4. **Asserções por código, não por texto.**
+
+- Erros do banco são comparados pelo SQLSTATE (`23505`, `23514`, `23503`, `42501`,
+  `WL001`–`WL004`) via `sqlState()`, nunca pela mensagem, que muda com versão e idioma.
+- Erros da API são comparados por status HTTP e `error.code`.
+
+5. **Cada teste de constraint viola uma única regra.**
    O PostgreSQL verifica em ordem fixa (CHECK → UNIQUE → FOREIGN KEY → triggers deferidos
    no COMMIT) e para na primeira falha. Um dado que viola duas regras faz o teste depender
    dessa ordem e não provar o que diz provar.
+6. **Concorrência com paralelismo real e repetição.**
 
-7. **Concorrência com paralelismo real e repetição.**
-   - Requisições HTTP simultâneas (`Promise.all`), cada uma com sua conexão do pool e sua
-     transação no PostgreSQL.
-   - Cada corrida é repetida `CONCURRENCY_ITERATIONS` vezes (padrão 10; verificado com 50),
-     porque uma corrida que passa uma vez pode ter tido sorte.
-   - Asserções sobre o banco (contagem de lançamentos por direção), não só sobre as respostas:
-     um débito duplicado aparece no ledger mesmo que a resposta pareça certa.
-   - Locks segurados por fora da aplicação (`connectPersistence` sobre o mesmo banco) para
-     provar comportamento sob espera: lock por wallet e `lock_timeout`.
+- Requisições HTTP simultâneas (`Promise.all`), cada uma com sua conexão do pool e sua
+  transação no PostgreSQL.
+- Cada corrida é repetida `CONCURRENCY_ITERATIONS` vezes (padrão 10; verificado com 50),
+  porque uma corrida que passa uma vez pode ter tido sorte.
+- Asserções sobre o banco (contagem de lançamentos por direção), não só sobre as respostas:
+  um débito duplicado aparece no ledger mesmo que a resposta pareça certa.
+- Locks segurados por fora da aplicação (`connectPersistence` sobre o mesmo banco) para
+  provar comportamento sob espera: lock por wallet e `lock_timeout`.
 
-8. **Invariante final em todas as suítes que movimentam saldo.**
+7. **Invariante final em todas as suítes que movimentam saldo.**
    `walletsInconsistentWithLedger()` (`test/support/invariants.ts`) compara, numa única query,
    o saldo de cada wallet com a soma assinada do seu ledger. O `afterAll` exige lista vazia.
+8. **Determinismo.**
 
-9. **Determinismo.**
-   - `Clock` e `IdGenerator` injetáveis; nos testes de domínio e persistência, `FixedClock`
-     e `SequentialIdGenerator` tornam datas e ids previsíveis.
-   - O backoff aceita `jitter: 'none'` ou uma fonte aleatória injetada.
-   - Cada teste cria os próprios dados (wallets e jogadores com UUID novo), sem depender
-     da ordem de execução.
+- `Clock` e `IdGenerator` injetáveis; nos testes de domínio e persistência, `FixedClock`
+  e `SequentialIdGenerator` tornam datas e ids previsíveis.
+- O backoff aceita `jitter: 'none'` ou uma fonte aleatória injetada.
+- Cada teste cria os próprios dados (wallets e jogadores com UUID novo), sem depender
+  da ordem de execução.
 
-10. **Todo teste importante passa por um "experimento de sabotagem".**
-    Ao escrever um teste de garantia, a regra correspondente é desligada de propósito
-    (trigger comentado, lock removido, `.sort()` retirado do hash, re-checagem de
-    idempotência comentada) para confirmar que o teste falha. Um teste que nunca falha
-    não prova nada.
+9. **Todo teste importante passa por um "experimento de sabotagem".**
+   Ao escrever um teste de garantia, a regra correspondente é desligada de propósito
+   (trigger comentado, lock removido, `.sort()` retirado do hash, re-checagem de
+   idempotência comentada) para confirmar que o teste falha. Um teste que nunca falha
+   não prova nada.
 
 **Helpers de teste.**
 
@@ -319,7 +319,7 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
 | Reinício do serviço com consistência final                                     | Coberto (resiliência: carga mista, SIGKILL, SIGTERM e reinício total) |
 | Inbox, redelivery, retry e DLQ                                                 | Coberto (handler, ponta a ponta e resiliência)                        |
 | Worker morto depois do commit e antes do ack                                   | Coberto (resiliência, SIGKILL real)                                   |
-| **Comandos.**                                                                  |
+| **Comandos.**                                                                  |                                                                       |
 
 | Comando                                                                | Roda                         |
 | ---------------------------------------------------------------------- | ---------------------------- |
@@ -333,7 +333,7 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
 
 - **Mocks de banco ou de repositório nos testes de integração:** proibido pelo enunciado e
   incapaz de provar constraints, triggers, locks e atomicidade.
-- **`TRUNCATE` entre testes:** impossível por design, porque o ledger bloqueia TRUNCATE.
+- `TRUNCATE` **entre testes:** impossível por design, porque o ledger bloqueia TRUNCATE.
 - **Uma transação desfeita por teste:** não serve para concorrência (várias conexões) nem
   para triggers deferidos (só disparam no COMMIT).
 - **Testcontainers por suíte:** isolamento máximo, mas boot lento por suíte e suporte
@@ -348,7 +348,7 @@ serialização por wallet) vivem no banco; só um banco real consegue prová-las
 - Um banco esquecido por um teste interrompido (`Ctrl+C`) pode sobrar; a limpeza manual está
   documentada no README.
 
-**Teste de reinício (`restart-consistency.test.ts`).** Três instâncias (toda instância faz tudo)
+**Teste de reinício (**`restart-consistency.test.ts`**).** Três instâncias (toda instância faz tudo)
 recebem carga mista de 12 wallets (HTTP e fila, referências fora de ordem nos dois canais,
 mensagens entregues em duplicata) enquanto uma instância morre com SIGKILL, outra recebe
 SIGTERM e, por fim, todas morrem com SIGKILL e o serviço é reiniciado. O cliente HTTP reenvia
@@ -572,8 +572,7 @@ silêncio; a DLQ a preserva para investigação.
 
 - O caso de uso grava os eventos na outbox na MESMA transação do efeito financeiro;
   nada é publicado antes do commit, porque quem publica é o relay, lendo o que já foi confirmado.
-- Cada rodada do relay: (1) reserva um lote com `UPDATE ... WHERE id IN (SELECT ... FOR UPDATE
-SKIP LOCKED) RETURNING`, gravando um lease (`locked_until`, `locked_by`); (2) publica fora de
+- Cada rodada do relay: (1) reserva um lote com `UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING`, gravando um lease (`locked_until`, `locked_by`); (2) publica fora de
   transação; (3) marca os publicados e agenda os que falharam, em transação curta.
 - Publicação no `wallet-events.fifo` com `SendMessageBatch`: `MessageGroupId` = aggregateId
   (ordem por wallet), `MessageDeduplicationId` = eventId, corpo = envelope gravado.
@@ -727,5 +726,5 @@ depois de tráfego real; `wager-message-handler.test.ts` cobre
 real do `SqsPollingConsumer` (LocalStack); `outbox-relay.test.ts` cobre
 `outbox_publish_lag_seconds`.
 
-**Consequências.** `/metrics` e `/health/*` ficam sempre abertos (sem guard), como o enunciado
+**Consequências.** `/metrics` e `/health/`* ficam sempre abertos (sem guard), como o enunciado
 exige. OpenTelemetry e dashboard seguem opcionais, não implementados.
