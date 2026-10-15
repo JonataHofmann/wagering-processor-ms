@@ -21,12 +21,12 @@ import {
   Module,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { EntityManagerContext } from './entity-manager-context';
-import { MikroTransactionManager } from './mikro-transaction-manager';
+import { EntityManagerContext } from '@/src/infrastructure/persistence/entity-manager-context';
+import { MikroTransactionManager } from '@/src/infrastructure/persistence/mikro-transaction-manager';
 import config from '@/src/infrastructure/persistence/mikro-orm.config';
 
-import { RECONCILIATION_REPOSITORY } from '../../modules/wallet/application/ports/reconciliation.repository';
-import { MikroReconciliationRepository } from '../../modules/wallet/infrastructure/reconciliation/mikro-reconciliation.repository';
+import { RECONCILIATION_REPOSITORY } from '@/src/modules/wallet/application/ports/reconciliation.repository';
+import { MikroReconciliationRepository } from '@/src/modules/wallet/infrastructure/reconciliation/mikro-reconciliation.repository';
 export interface PersistenceOptions {
   databaseUrl: string;
 }

@@ -1,4 +1,4 @@
-import { DomainError } from './domain-error';
+import { DomainError } from '@/src/shared/error/domain-error';
 
 export type InvalidMoneyCode = 'INVALID_AMOUNT' | 'INVALID_CURRENCY';
 

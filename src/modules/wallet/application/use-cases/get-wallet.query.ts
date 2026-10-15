@@ -1,7 +1,7 @@
 import { WalletRepository } from '@/src/modules/wallet/application/ports/wallet.repository';
 import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
 import { ResourceNotFoundError } from '@/src/shared/error/application-errors';
-import { toWalletView, type WalletView } from './wallet-view';
+import { toWalletView, type WalletView } from '@/src/modules/wallet/application/use-cases/wallet-view';
 
 export class GetWalletQuery {
   constructor(

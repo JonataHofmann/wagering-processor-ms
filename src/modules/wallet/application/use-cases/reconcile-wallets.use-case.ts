@@ -1,13 +1,13 @@
 import type {
   ReconciliationRepository,
   WalletLedgerSnapshot,
-} from '../ports/reconciliation.repository';
+} from '@/src/modules/wallet/application/ports/reconciliation.repository';
 
-import type { Clock } from '../../../../shared/application/ports/clock.port';
-import type { MoneyProps } from '../../../../shared/domain/money';
-import type { ReconciliationAlerts } from '../ports/reconciliation-alerts.port';
-import { ResourceNotFoundError } from '../../../../shared/error/application-errors';
-import type { TransactionManager } from '../../../../shared/application/ports/transaction-manager.port';
+import type { Clock } from '@/src/shared/application/ports/clock.port';
+import type { MoneyProps } from '@/src/shared/domain/money';
+import type { ReconciliationAlerts } from '@/src/modules/wallet/application/ports/reconciliation-alerts.port';
+import { ResourceNotFoundError } from '@/src/shared/error/application-errors';
+import type { TransactionManager } from '@/src/shared/application/ports/transaction-manager.port';
 
 export type DiscrepancyCode =
   | 'BALANCE_MISMATCH' // saldo gravado ≠ soma do ledger (a verificação exigida pelo enunciado)

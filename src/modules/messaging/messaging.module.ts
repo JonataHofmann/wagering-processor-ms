@@ -16,23 +16,23 @@ import {
 import {
   EVENT_PUBLISHER,
   type EventPublisher,
-} from './application/ports/event-publisher.port';
+} from '@/src/modules/messaging/application/ports/event-publisher.port';
 import {
   OUTBOX_REPOSITORY,
   type OutboxRepository,
-} from './application/ports/outbox.repository';
-import { OutboxRelayWorker } from './infrastructure/relay/outbox-relay.worker';
+} from '@/src/modules/messaging/application/ports/outbox.repository';
+import { OutboxRelayWorker } from '@/src/modules/messaging/infrastructure/relay/outbox-relay.worker';
 import {
   RELAY_CONFIG,
   type RelayConfig,
-} from './infrastructure/relay/relay.config';
-import { SqsEventPublisher } from './infrastructure/sqs/sqs-event-publisher';
+} from '@/src/modules/messaging/infrastructure/relay/relay.config';
+import { SqsEventPublisher } from '@/src/modules/messaging/infrastructure/sqs/sqs-event-publisher';
 import {
   SQS_CLIENT,
   SQS_CONFIG,
   type SqsConfig,
   createSqsClient,
-} from './infrastructure/sqs/sqs.config';
+} from '@/src/modules/messaging/infrastructure/sqs/sqs.config';
 
 class SqsClientShutdown implements OnApplicationShutdown {
   constructor(@Inject(SQS_CLIENT) private readonly client: SQSClient) {}

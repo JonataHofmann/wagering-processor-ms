@@ -9,9 +9,9 @@ import {
   Module,
 } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
-import { PersistenceModule } from './infrastructure/persistence/persistence.module';
-import type { SqsConfig } from './modules/messaging/infrastructure/sqs/sqs.config';
-import { MessagingModule } from './modules/messaging/messaging.module';
+import { PersistenceModule } from '@/src/infrastructure/persistence/persistence.module';
+import type { SqsConfig } from '@/src/modules/messaging/infrastructure/sqs/sqs.config';
+import { MessagingModule } from '@/src/modules/messaging/messaging.module';
 import {
   REFERENCE_LOOKUP_POLICY,
   type ReferenceLookupConfig,
@@ -22,18 +22,18 @@ import {
   SCHEDULER_CONFIG,
   type SchedulerConfig,
   schedulerConfigFromEnv,
-} from './modules/wagering/infrastructure/scheduler/scheduler.config';
-import { WageringModule } from './modules/wagering/wagering.module';
-import { WalletModule } from './modules/wallet/wallet.module';
-import { type AuthConfig, authConfigFromEnv } from './platform/auth/auth.config';
-import { AuthModule } from './platform/auth/auth.module';
-import { HealthController } from './platform/health/health.controller';
-import { ErrorMappingFilter } from './platform/http/error-mapping.filter';
+} from '@/src/modules/wagering/infrastructure/scheduler/scheduler.config';
+import { WageringModule } from '@/src/modules/wagering/wagering.module';
+import { WalletModule } from '@/src/modules/wallet/wallet.module';
+import { type AuthConfig, authConfigFromEnv } from '@/src/platform/auth/auth.config';
+import { AuthModule } from '@/src/platform/auth/auth.module';
+import { HealthController } from '@/src/platform/health/health.controller';
+import { ErrorMappingFilter } from '@/src/platform/http/error-mapping.filter';
 
-import { HttpMetricsInterceptor } from './platform/observability/http-metrics.interceptor';
-import { httpContextMiddleware } from './platform/observability/http-context.middleware';
-import { InMemoryMetrics, METRICS } from './platform/observability/metrics';
-import { MetricsController } from './platform/observability/metrics.controller';
+import { HttpMetricsInterceptor } from '@/src/platform/observability/http-metrics.interceptor';
+import { httpContextMiddleware } from '@/src/platform/observability/http-context.middleware';
+import { InMemoryMetrics, METRICS } from '@/src/platform/observability/metrics';
+import { MetricsController } from '@/src/platform/observability/metrics.controller';
 export interface AppOptions {
   databaseUrl: string;
   debug?: boolean;

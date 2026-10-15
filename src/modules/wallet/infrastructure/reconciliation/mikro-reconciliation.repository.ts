@@ -1,5 +1,5 @@
-import type { EntityManagerContext } from '../../../../infrastructure/persistence/entity-manager-context';
-import type { ReconciliationRepository, WalletLedgerSnapshot } from '../../application/ports/reconciliation.repository';
+import type { EntityManagerContext } from '@/src/infrastructure/persistence/entity-manager-context';
+import type { ReconciliationRepository, WalletLedgerSnapshot } from '@/src/modules/wallet/application/ports/reconciliation.repository';
 
 interface SnapshotRow {
   wallet_id: string;

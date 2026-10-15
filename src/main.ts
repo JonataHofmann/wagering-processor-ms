@@ -7,15 +7,15 @@ import { requireEnv } from '@/src/shared/util/require-env';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AppModule } from './app.module';
-import { sqsConfigFromEnv } from './modules/messaging/infrastructure/sqs/sqs.config';
-import { schedulerConfigFromEnv } from './modules/wagering/infrastructure/scheduler/scheduler.config';
-import { createValidationPipe } from './platform/http/validation-pipe';
+import { AppModule } from '@/src/app.module';
+import { sqsConfigFromEnv } from '@/src/modules/messaging/infrastructure/sqs/sqs.config';
+import { schedulerConfigFromEnv } from '@/src/modules/wagering/infrastructure/scheduler/scheduler.config';
+import { createValidationPipe } from '@/src/platform/http/validation-pipe';
 import {
   JsonLogger,
   type LogLevel,
   parseLogLevel,
-} from './platform/observability/json-logger';
+} from '@/src/platform/observability/json-logger';
 const logger = new Logger('Bootstrap');
 const ALL_LEVELS: LogLevel[] = [
   'fatal',

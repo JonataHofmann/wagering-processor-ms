@@ -14,7 +14,7 @@ import { EventPublisher } from '@/src/modules/messaging/application/ports/event-
 import { OutboxRepository } from '@/src/modules/messaging/application/ports/outbox.repository';
 import { runWithLogContext } from '@/src/platform/observability/log-context';
 import type { Metrics } from '@/src/platform/observability/metrics';
-import type { RelayConfig } from './relay.config';
+import type { RelayConfig } from '@/src/modules/messaging/infrastructure/relay/relay.config';
 
 /**
  * Roda o OutboxRelay em loop em toda instância — fica inerte se SQS não estiver

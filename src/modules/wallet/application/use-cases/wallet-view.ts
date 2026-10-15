@@ -1,5 +1,5 @@
 import { LedgerDirection } from '@/src/modules/wallet/domain/value-objects/ledger-direction';
-import type { MoneyProps } from '../../../../shared/domain/money';
+import type { MoneyProps } from '@/src/shared/domain/money';
 import type { Wallet } from '@/src/modules/wallet/domain/entities/wallet';
 import type { WalletLedgerEntry } from '@/src/modules/wallet/domain/entities/wallet-ledger-entry';
 

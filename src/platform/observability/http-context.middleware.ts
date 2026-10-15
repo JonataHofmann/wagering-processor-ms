@@ -1,4 +1,4 @@
-import { currentLogContext, runWithLogContext } from './log-context';
+import { currentLogContext, runWithLogContext } from '@/src/platform/observability/log-context';
 
 import { Logger } from '@nestjs/common';
 

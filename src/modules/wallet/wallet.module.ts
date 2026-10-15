@@ -19,30 +19,30 @@ import { Module } from '@nestjs/common';
 import {
   LEDGER_REPOSITORY,
   type LedgerRepository,
-} from './application/ports/ledger.repository';
+} from '@/src/modules/wallet/application/ports/ledger.repository';
 import {
   WALLET_REPOSITORY,
   type WalletRepository,
-} from './application/ports/wallet.repository';
-import { CreateWalletUseCase } from './application/use-cases/create-wallet.use-case';
-import { GetWalletQuery } from './application/use-cases/get-wallet.query';
-import { ListLedgerQuery } from './application/use-cases/list-ledger.query';
+} from '@/src/modules/wallet/application/ports/wallet.repository';
+import { CreateWalletUseCase } from '@/src/modules/wallet/application/use-cases/create-wallet.use-case';
+import { GetWalletQuery } from '@/src/modules/wallet/application/use-cases/get-wallet.query';
+import { ListLedgerQuery } from '@/src/modules/wallet/application/use-cases/list-ledger.query';
 
 /**
  * Os casos de uso são classes puras (sem decorators do Nest).
  * O módulo os monta por factory, injetando as portas pelos tokens.
  */
-import { METRICS, type Metrics } from '../../platform/observability/metrics';
+import { METRICS, type Metrics } from '@/src/platform/observability/metrics';
 import {
   RECONCILIATION_ALERTS,
   type ReconciliationAlerts,
-} from './application/ports/reconciliation-alerts.port';
+} from '@/src/modules/wallet/application/ports/reconciliation-alerts.port';
 import {
   RECONCILIATION_REPOSITORY,
   type ReconciliationRepository,
-} from './application/ports/reconciliation.repository';
-import { ReconcileWalletsUseCase } from './application/use-cases/reconcile-wallets.use-case';
-import { LoggingReconciliationAlerts } from './infrastructure/reconciliation/logging-reconciliation-alerts';
+} from '@/src/modules/wallet/application/ports/reconciliation.repository';
+import { ReconcileWalletsUseCase } from '@/src/modules/wallet/application/use-cases/reconcile-wallets.use-case';
+import { LoggingReconciliationAlerts } from '@/src/modules/wallet/infrastructure/reconciliation/logging-reconciliation-alerts';
 import { WalletsController } from '@/src/modules/wallet/presentation/controllers/wallets.controller';
 @Module({
   controllers: [WalletsController],

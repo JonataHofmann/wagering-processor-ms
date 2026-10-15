@@ -13,7 +13,7 @@ import {
   Logger,
   type OnApplicationBootstrap,
 } from '@nestjs/common';
-import type { SchedulerConfig } from './scheduler.config';
+import type { SchedulerConfig } from '@/src/modules/wagering/infrastructure/scheduler/scheduler.config';
 
 /**
  * Reprocessa pendências de referência vencidas. Roda em toda instância.

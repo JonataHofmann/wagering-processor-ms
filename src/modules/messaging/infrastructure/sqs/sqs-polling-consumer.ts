@@ -14,7 +14,7 @@ import { Logger } from '@nestjs/common';
 import type {
   MessageDisposition,
   MessageHandlerFn,
-} from './message-disposition';
+} from '@/src/modules/messaging/infrastructure/sqs/message-disposition';
 
 export interface SqsPollingConsumerOptions {
   /** nome para logs */

@@ -1,5 +1,5 @@
 import type { LoggerService } from '@nestjs/common';
-import { currentLogContext } from './log-context';
+import { currentLogContext } from '@/src/platform/observability/log-context';
 
 export type LogLevel = 'fatal' | 'error' | 'warn' | 'log' | 'debug' | 'verbose';
 

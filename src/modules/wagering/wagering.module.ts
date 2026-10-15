@@ -32,7 +32,7 @@ import { Module } from '@nestjs/common';
 import {
   INBOX_REPOSITORY,
   type InboxRepository,
-} from '../messaging/application/ports/inbox.repository';
+} from '@/src/modules/messaging/application/ports/inbox.repository';
 
 import {
   SQS_CLIENT,
@@ -46,13 +46,13 @@ import {
   type ReferenceLookupPolicy,
 } from '@/src/modules/wagering/application/use-cases/reference-lookup.policy';
 import { WagerSettlement } from '@/src/modules/wagering/application/use-cases/wager-settlement';
-import { PendingReferenceScheduler } from './infrastructure/scheduler/pending-reference.scheduler';
+import { PendingReferenceScheduler } from '@/src/modules/wagering/infrastructure/scheduler/pending-reference.scheduler';
 import {
   SCHEDULER_CONFIG,
   type SchedulerConfig,
-} from './infrastructure/scheduler/scheduler.config';
-import { WagerMessageHandler } from './infrastructure/sqs/wager-message.handler';
-import { WagerTransactionsConsumer } from './infrastructure/sqs/wager-transactions.consumer';
+} from '@/src/modules/wagering/infrastructure/scheduler/scheduler.config';
+import { WagerMessageHandler } from '@/src/modules/wagering/infrastructure/sqs/wager-message.handler';
+import { WagerTransactionsConsumer } from '@/src/modules/wagering/infrastructure/sqs/wager-transactions.consumer';
 
 @Module({
   controllers: [WageringController],
