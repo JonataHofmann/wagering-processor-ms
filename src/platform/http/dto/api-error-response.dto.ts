@@ -8,7 +8,7 @@ export class ApiErrorDetailDto {
   message!: string;
 
   @ApiPropertyOptional({
-    description: 'Detalhes adicionais do erro (ex.: violações de validação)',
+    description: 'Additional error details (e.g. validation violations)',
   })
   details?: unknown;
 }

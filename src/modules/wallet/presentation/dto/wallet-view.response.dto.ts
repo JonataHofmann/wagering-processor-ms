@@ -11,7 +11,7 @@ export class WalletViewDto {
   @ApiProperty({ type: MoneyDto })
   balance!: MoneyDto;
 
-  @ApiProperty({ description: 'Incrementa a cada lançamento no ledger' })
+  @ApiProperty({ description: 'Increments on every ledger entry' })
   version!: number;
 
   @ApiProperty({ format: 'date-time' })

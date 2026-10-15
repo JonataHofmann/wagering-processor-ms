@@ -58,15 +58,15 @@ export class WalletsController {
   @Post(':walletId/reconciliation')
   @HttpCode(200)
   @ApiOperation({
-    summary: 'Reconcilia o saldo gravado com o saldo reconstruído pelo ledger',
+    summary: 'Reconciles the stored balance with the balance rebuilt from the ledger',
     description:
-      'Somente leitura: uma divergência volta no relatório (200) e é registrada em log/métrica, sem alterar o saldo.',
+      'Read-only: a divergence comes back in the report (200) and is recorded in logs/metrics, without changing the balance.',
   })
   @ApiParam({ name: 'walletId', format: 'uuid' })
   @ApiResponse({ status: 200, type: WalletReconciliationDto })
   @ApiResponse({
     status: 404,
-    description: 'Wallet não encontrada',
+    description: 'Wallet not found',
     type: ApiErrorResponseDto,
   })
   async reconcile(
@@ -77,22 +77,22 @@ export class WalletsController {
 
   @Post()
   @HttpCode(201)
-  @ApiOperation({ summary: 'Abre uma nova wallet para um jogador' })
+  @ApiOperation({ summary: 'Opens a new wallet for a player' })
   @ApiHeader({
     name: 'x-correlation-id',
     required: false,
-    description: 'Correlation id para rastreio; gerado quando omitido',
+    description: 'Correlation id for tracing; generated when omitted',
   })
   @ApiBody({ type: CreateWalletRequestDto })
   @ApiResponse({ status: 201, type: WalletViewDto })
   @ApiResponse({
     status: 400,
-    description: 'Payload inválido',
+    description: 'Invalid payload',
     type: ApiErrorResponseDto,
   })
   @ApiResponse({
     status: 409,
-    description: 'Já existe uma wallet para este jogador',
+    description: 'A wallet already exists for this player',
     type: ApiErrorResponseDto,
   })
   async create(
@@ -110,12 +110,12 @@ export class WalletsController {
   }
 
   @Get(':walletId')
-  @ApiOperation({ summary: 'Consulta uma wallet pelo id' })
+  @ApiOperation({ summary: 'Looks up a wallet by id' })
   @ApiParam({ name: 'walletId', format: 'uuid' })
   @ApiResponse({ status: 200, type: WalletViewDto })
   @ApiResponse({
     status: 404,
-    description: 'Wallet não encontrada',
+    description: 'Wallet not found',
     type: ApiErrorResponseDto,
   })
   async get(
@@ -125,7 +125,7 @@ export class WalletsController {
   }
 
   @Get(':walletId/ledger')
-  @ApiOperation({ summary: 'Lista o ledger da wallet, paginado' })
+  @ApiOperation({ summary: 'Lists the wallet ledger, paginated' })
   @ApiParam({ name: 'walletId', format: 'uuid' })
   @ApiQuery({ name: 'cursor', required: false })
   @ApiQuery({
@@ -136,7 +136,7 @@ export class WalletsController {
   @ApiResponse({ status: 200, type: LedgerPageDto })
   @ApiResponse({
     status: 404,
-    description: 'Wallet não encontrada',
+    description: 'Wallet not found',
     type: ApiErrorResponseDto,
   })
   async ledger(

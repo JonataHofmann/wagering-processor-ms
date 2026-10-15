@@ -7,11 +7,11 @@ import { IsString } from 'class-validator';
  * domínio (Money.from → INVALID_AMOUNT/INVALID_CURRENCY).
  */
 export class MoneyDto {
-  @ApiProperty({ example: '25.00', description: 'Valor decimal com 2 casas' })
+  @ApiProperty({ example: '25.00', description: 'Decimal value with 2 places' })
   @IsString()
   amount!: string;
 
-  @ApiProperty({ example: 'BRL', description: 'Moeda ISO-4217' })
+  @ApiProperty({ example: 'BRL', description: 'ISO-4217 currency' })
   @IsString()
   currency!: string;
 }

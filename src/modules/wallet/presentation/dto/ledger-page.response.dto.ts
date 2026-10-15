@@ -34,7 +34,7 @@ export class LedgerPageDto {
 
   @ApiPropertyOptional({
     nullable: true,
-    description: 'Cursor para a próxima página; null quando não há mais páginas',
+    description: 'Cursor for the next page; null when there are no more pages',
   })
   nextCursor!: string | null;
 }

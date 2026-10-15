@@ -6,7 +6,7 @@ export const DEFAULT_PAGE_SIZE = 50;
 export const MAX_PAGE_SIZE = 200;
 
 export class ListLedgerQueryDto {
-  @ApiPropertyOptional({ description: 'Cursor opaco devolvido pela página anterior' })
+  @ApiPropertyOptional({ description: 'Opaque cursor returned by the previous page' })
   @IsOptional()
   @IsString()
   @MaxLength(200)

@@ -22,13 +22,13 @@ export class WalletReconciliationDto {
   @ApiProperty({ format: 'uuid' })
   walletId!: string;
 
-  @ApiProperty({ description: 'true quando não há divergências' })
+  @ApiProperty({ description: 'true when there are no discrepancies' })
   consistent!: boolean;
 
   @ApiProperty({ type: MoneyDto })
   storedBalance!: MoneyDto;
 
-  @ApiProperty({ type: MoneyDto, description: 'Saldo reconstruído a partir do ledger' })
+  @ApiProperty({ type: MoneyDto, description: 'Balance rebuilt from the ledger' })
   calculatedBalance!: MoneyDto;
 
   @ApiProperty({ type: MoneyDto })

@@ -55,39 +55,39 @@ export class WageringController {
 
   @Post('wagering/transactions')
   @ApiOperation({
-    summary: 'Envia uma transação de aposta (BET/WIN/LOSS/REFUND/ROLLBACK)',
+    summary: 'Submits a wager transaction (BET/WIN/LOSS/REFUND/ROLLBACK)',
     description:
-      'Idempotente por Idempotency-Key: reenviar a mesma chave devolve o mesmo resultado (idempotentReplay=true) sem reaplicar a operação.',
+      'Idempotent by Idempotency-Key: resending the same key returns the same result (idempotentReplay=true) without reapplying the operation.',
   })
   @ApiHeader({
     name: 'Idempotency-Key',
     required: true,
-    description: 'Chave de idempotência da requisição (máx. 255 chars)',
+    description: 'Request idempotency key (max 255 chars)',
   })
   @ApiBody({ type: SubmitWagerTransactionRequestDto })
   @ApiResponse({
     status: 200,
-    description: 'Transação processada (PROCESSED) ou replay idempotente',
+    description: 'Transaction processed (PROCESSED) or idempotent replay',
     type: TransactionResultDto,
   })
   @ApiResponse({
     status: 202,
-    description: 'Transação aceita, aguardando processamento (PENDING/PENDING_REFERENCE)',
+    description: 'Transaction accepted, awaiting processing (PENDING/PENDING_REFERENCE)',
     type: TransactionResultDto,
   })
   @ApiResponse({
     status: 400,
-    description: 'Payload ou cabeçalho inválido',
+    description: 'Invalid payload or header',
     type: ApiErrorResponseDto,
   })
   @ApiResponse({
     status: 422,
-    description: 'Rejeitada por regra de negócio (ex.: saldo insuficiente)',
+    description: 'Rejected by business rule (e.g. insufficient funds)',
     type: TransactionResultDto,
   })
   @ApiResponse({
     status: 500,
-    description: 'Falha permanente de infraestrutura (FAILED)',
+    description: 'Permanent infrastructure failure (FAILED)',
     type: TransactionResultDto,
   })
   async submit(
@@ -117,12 +117,12 @@ export class WageringController {
   }
 
   @Get('wagering/transactions/:transactionId')
-  @ApiOperation({ summary: 'Consulta uma transação pelo id interno' })
+  @ApiOperation({ summary: 'Looks up a transaction by internal id' })
   @ApiParam({ name: 'transactionId', format: 'uuid' })
   @ApiResponse({ status: 200, type: TransactionViewDto })
   @ApiResponse({
     status: 404,
-    description: 'Transação não encontrada',
+    description: 'Transaction not found',
     type: ApiErrorResponseDto,
   })
   async byId(
@@ -133,14 +133,14 @@ export class WageringController {
 
   @Get('providers/:providerId/wagering/transactions/:externalTransactionId')
   @ApiOperation({
-    summary: 'Consulta uma transação pelo (providerId, externalTransactionId)',
+    summary: 'Looks up a transaction by (providerId, externalTransactionId)',
   })
   @ApiParam({ name: 'providerId' })
   @ApiParam({ name: 'externalTransactionId' })
   @ApiResponse({ status: 200, type: TransactionViewDto })
   @ApiResponse({
     status: 404,
-    description: 'Transação não encontrada',
+    description: 'Transaction not found',
     type: ApiErrorResponseDto,
   })
   async byExternalId(

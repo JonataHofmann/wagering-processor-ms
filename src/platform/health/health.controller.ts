@@ -44,7 +44,7 @@ export class HealthController {
 
   @Get('live')
   @ApiOperation({
-    summary: 'Liveness probe: processo vivo, não consulta dependências',
+    summary: 'Liveness probe: process is alive, does not query dependencies',
   })
   @ApiResponse({ status: 200, schema: { example: { status: 'ok' } } })
   live(): { status: 'ok' } {
@@ -53,7 +53,7 @@ export class HealthController {
 
   @Get('ready')
   @ApiOperation({
-    summary: 'Readiness probe: PostgreSQL e SQS alcançáveis',
+    summary: 'Readiness probe: PostgreSQL and SQS reachable',
   })
   @ApiResponse({
     status: 200,
@@ -63,7 +63,7 @@ export class HealthController {
   })
   @ApiResponse({
     status: 503,
-    description: 'PostgreSQL ou SQS inalcançável',
+    description: 'PostgreSQL or SQS unreachable',
     schema: {
       example: {
         status: 'error',

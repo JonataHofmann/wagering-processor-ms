@@ -48,7 +48,7 @@ export class TransactionViewDto {
     type: MoneyDto,
     nullable: true,
     description:
-      'Omitido (null) quando a wallet não pertence ao jogador informado',
+      'Omitted (null) when the wallet does not belong to the given player',
   })
   balance!: MoneyDto | null;
 

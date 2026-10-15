@@ -18,12 +18,12 @@ export class TransactionResultDto {
     type: MoneyDto,
     nullable: true,
     description:
-      'Saldo observado quando a operação foi decidida; null enquanto pendente',
+      'Balance observed when the operation was decided; null while pending',
   })
   balance!: MoneyDto | null;
 
   @ApiProperty({
-    description: 'true quando a mesma Idempotency-Key já havia sido processada',
+    description: 'true when the same Idempotency-Key had already been processed',
   })
   idempotentReplay!: boolean;
 }

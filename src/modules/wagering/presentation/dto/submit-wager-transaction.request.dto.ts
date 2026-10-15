@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 
 export class SubmitWagerTransactionRequestDto {
-  @ApiProperty({ example: 'provider-1', description: 'Identificador do provedor' })
+  @ApiProperty({ example: 'provider-1', description: 'Provider identifier' })
   @IsString()
   @MaxLength(64)
   providerId!: string;
@@ -53,7 +53,7 @@ export class SubmitWagerTransactionRequestDto {
 
   @ApiPropertyOptional({
     description:
-      'Obrigatório para WIN/REFUND/ROLLBACK: aponta para a transação referenciada',
+      'Required for WIN/REFUND/ROLLBACK: points to the referenced transaction',
     example: 'ext-tx-100',
   })
   @IsOptional()

@@ -49,7 +49,7 @@ async function bootstrap(): Promise<void> {
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Wagering Processor API')
     .setDescription(
-      'Processamento de transações de aposta (BET/WIN/LOSS/REFUND/ROLLBACK), wallets e ledger',
+      'Processing of wager transactions (BET/WIN/LOSS/REFUND/ROLLBACK), wallets and ledger',
     )
     .setVersion('0.0.1')
     .addTag('wagering')

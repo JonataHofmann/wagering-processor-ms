@@ -39,67 +39,67 @@ export const FAILURE_CODES: Readonly<Record<FailureCode, FailureCodeInfo>> = {
   INSUFFICIENT_FUNDS: {
     status: 'REJECTED',
     providerAction: 'DO_NOT_RETRY',
-    description: 'Saldo insuficiente para a aposta',
+    description: 'Insufficient balance for the bet',
   },
   REVERSAL_INSUFFICIENT_FUNDS: {
     status: 'REJECTED',
     providerAction: 'ESCALATE',
     description:
-      'Reversão deixaria o saldo negativo (ex.: rollback de um WIN já gasto)',
+      'Reversal would leave the balance negative (e.g. rollback of an already-spent WIN)',
   },
   CURRENCY_MISMATCH: {
     status: 'REJECTED',
     providerAction: 'FIX_PAYLOAD',
-    description: 'Moeda da operação diferente da moeda da wallet',
+    description: 'Operation currency differs from the wallet currency',
   },
   WALLET_NOT_FOUND: {
     // status nominal: na prática vira HTTP 404 antes de existir uma transação
     // persistida com este failureCode (ver comentário em WalletNotFound acima).
     status: 'REJECTED',
     providerAction: 'FIX_PAYLOAD',
-    description: 'Wallet inexistente (nunca persistido: resulta em HTTP 404)',
+    description: 'Wallet does not exist (never persisted: results in HTTP 404)',
   },
   WALLET_PLAYER_MISMATCH: {
     status: 'REJECTED',
     providerAction: 'FIX_PAYLOAD',
-    description: 'A wallet não pertence ao jogador informado',
+    description: 'The wallet does not belong to the given player',
   },
   REFERENCE_NOT_FOUND: {
     status: 'REJECTED',
     providerAction: 'ESCALATE',
-    description: 'Transação referenciada não chegou dentro do TTL',
+    description: 'Referenced transaction did not arrive within the TTL',
   },
   REFERENCE_CONTEXT_MISMATCH: {
     status: 'REJECTED',
     providerAction: 'FIX_PAYLOAD',
     description:
-      'Referência de outro provedor, jogador, wallet, moeda ou rodada',
+      'Reference from another provider, player, wallet, currency or round',
   },
   REFERENCE_INVALID_KIND: {
     status: 'REJECTED',
     providerAction: 'FIX_PAYLOAD',
-    description: 'Tipo de referência não permitido (ex.: REFUND de um WIN)',
+    description: 'Reference kind not allowed (e.g. REFUND of a WIN)',
   },
   REFERENCE_NOT_PROCESSED: {
     status: 'REJECTED',
     providerAction: 'DO_NOT_RETRY',
     description:
-      'A transação referenciada não foi aplicada (rejeitada ou com falha)',
+      'The referenced transaction was not applied (rejected or failed)',
   },
   REFERENCE_ALREADY_REVERSED: {
     status: 'REJECTED',
     providerAction: 'DO_NOT_RETRY',
-    description: 'A transação referenciada já foi revertida',
+    description: 'The referenced transaction has already been reversed',
   },
   AMOUNT_MISMATCH: {
     status: 'REJECTED',
     providerAction: 'FIX_PAYLOAD',
-    description: 'Valor da reversão diferente do valor da referência',
+    description: 'Reversal amount differs from the reference amount',
   },
   INFRA_RETRIES_EXHAUSTED: {
     status: 'FAILED',
     providerAction: 'RETRY_LATER',
     description:
-      'Falha permanente de infraestrutura após esgotar as tentativas',
+      'Permanent infrastructure failure after exhausting retries',
   },
 };

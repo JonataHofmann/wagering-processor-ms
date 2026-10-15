@@ -8,7 +8,7 @@ export class CreateWalletRequestDto {
   @IsUUID()
   playerId!: string;
 
-  @ApiProperty({ type: MoneyDto, description: 'Saldo de abertura da wallet' })
+  @ApiProperty({ type: MoneyDto, description: 'Opening balance of the wallet' })
   @IsDefined()
   @ValidateNested()
   @Type(() => MoneyDto)
