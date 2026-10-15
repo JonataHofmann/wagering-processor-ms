@@ -10,20 +10,20 @@ A correção financeira é garantida pelo **PostgreSQL**, não pelo broker nem p
 
 ## 1. Status da implementação
 
-| Fase                        | Etapa                                                 | Status    |
-| --------------------------- | ----------------------------------------------------- | --------- |
-| Fundação                    | 1. Repositório (Bun + NestJS + TypeScript estrito)    | Concluída |
-|                             | 2. Infraestrutura local (PostgreSQL + LocalStack SQS) | Concluída |
-|                             | 3. MikroORM e runner de migrations                    | Concluída |
-|                             | 4. Schema, constraints, triggers, permissões e testes | Concluída |
-| Domínio puro                | 5. `Money`                                            | Concluída |
-|                             | 6. `Wallet` e `WalletLedgerEntry`                     | Concluída |
-|                             | 7. `WagerTransaction`                                 | Concluída |
-|                             | 8. `InboxMessage` e `OutboxMessage`                   | Concluída |
-| Persistência e casos de uso | 9 a 12 (casos de uso, HTTP, consumer SQS)             | Concluída |
-| Instâncias e mensageria     | 13 a 16 (múltiplas instâncias, outbox relay, scheduler) | Concluída |
-| Garantias finais            | 17 a 20 (concorrência, resiliência, reconciliação)    | Concluída |
-| Entrega                     | 21 a 23 (observabilidade, documentação, polimento)    | Concluída, exceto o abaixo |
+| Fase                        | Etapa                                                   | Status                     |
+| --------------------------- | ------------------------------------------------------- | -------------------------- |
+| Fundação                    | 1. Repositório (Bun + NestJS + TypeScript estrito)      | Concluída                  |
+|                             | 2. Infraestrutura local (PostgreSQL + LocalStack SQS)   | Concluída                  |
+|                             | 3. MikroORM e runner de migrations                      | Concluída                  |
+|                             | 4. Schema, constraints, triggers, permissões e testes   | Concluída                  |
+| Domínio puro                | 5. `Money`                                              | Concluída                  |
+|                             | 6. `Wallet` e `WalletLedgerEntry`                       | Concluída                  |
+|                             | 7. `WagerTransaction`                                   | Concluída                  |
+|                             | 8. `InboxMessage` e `OutboxMessage`                     | Concluída                  |
+| Persistência e casos de uso | 9 a 12 (casos de uso, HTTP, consumer SQS)               | Concluída                  |
+| Instâncias e mensageria     | 13 a 16 (múltiplas instâncias, outbox relay, scheduler) | Concluída                  |
+| Garantias finais            | 17 a 20 (concorrência, resiliência, reconciliação)      | Concluída                  |
+| Entrega                     | 21 a 23 (observabilidade, documentação, polimento)      | Concluída, exceto o abaixo |
 
 Itens específicos ainda em aberto (não bloqueiam nenhuma garantia financeira ou de concorrência):
 
@@ -151,12 +151,12 @@ SQS ──────────────▶  │  toda réplica faz tudo: 
 
 Os triggers **nunca escrevem dados**. Um erro `WL00x` em produção indica bug, não regra de negócio.
 
-| Código  | Trigger / função                                                  | Dispara quando                                                                                    |
-| ------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `WL001` | `trg_ledger_no_update_delete`, `trg_ledger_no_truncate` (`fn_ledger_append_only`) | `UPDATE`, `DELETE` ou `TRUNCATE` em `wallet_ledger_entries` — o ledger é append-only, nem o owner altera |
-| `WL002` | `trg_wallets_ledger_consistency`, `trg_ledger_transaction_consistency`, `trg_wtx_ledger_consistency` (constraint triggers, deferidos ao COMMIT) | Saldo/versão da wallet muda sem lançamento correspondente (ou o inverso); lançamento com valor, moeda, wallet ou direção que não batem com sua transação; transação `PROCESSED` sem lançamento (ou o inverso) |
-| `WL003` | `trg_wtx_guard` (`fn_wtx_guard`)                                    | `DELETE` em `wager_transactions`; `UPDATE` de uma transação já terminal (`PROCESSED`/`REJECTED`/`FAILED`); volta de `PENDING_REFERENCE` para `PENDING`; alteração de qualquer coluna fora do conjunto que o fluxo de pendência pode mudar (`status`, `failure_code`, `balance_snapshot`, `attempts`, `next_attempt_at`, `expires_at`, `reference_transaction_id`, `updated_at`, `processed_at`) |
-| `WL004` | `trg_wallets_immutable` (`fn_wallet_immutable_fields`)              | `UPDATE` que muda `id`, `player_id`, `currency` ou `created_at` de uma wallet                        |
+| Código  | Trigger / função                                                                                                                                | Dispara quando                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WL001` | `trg_ledger_no_update_delete`, `trg_ledger_no_truncate` (`fn_ledger_append_only`)                                                               | `UPDATE`, `DELETE` ou `TRUNCATE` em `wallet_ledger_entries` — o ledger é append-only, nem o owner altera                                                                                                                                                                                                                                                                                        |
+| `WL002` | `trg_wallets_ledger_consistency`, `trg_ledger_transaction_consistency`, `trg_wtx_ledger_consistency` (constraint triggers, deferidos ao COMMIT) | Saldo/versão da wallet muda sem lançamento correspondente (ou o inverso); lançamento com valor, moeda, wallet ou direção que não batem com sua transação; transação `PROCESSED` sem lançamento (ou o inverso)                                                                                                                                                                                   |
+| `WL003` | `trg_wtx_guard` (`fn_wtx_guard`)                                                                                                                | `DELETE` em `wager_transactions`; `UPDATE` de uma transação já terminal (`PROCESSED`/`REJECTED`/`FAILED`); volta de `PENDING_REFERENCE` para `PENDING`; alteração de qualquer coluna fora do conjunto que o fluxo de pendência pode mudar (`status`, `failure_code`, `balance_snapshot`, `attempts`, `next_attempt_at`, `expires_at`, `reference_transaction_id`, `updated_at`, `processed_at`) |
+| `WL004` | `trg_wallets_immutable` (`fn_wallet_immutable_fields`)                                                                                          | `UPDATE` que muda `id`, `player_id`, `currency` ou `created_at` de uma wallet                                                                                                                                                                                                                                                                                                                   |
 
 **Por que `UNIQUE (id, currency)` em `wallets`, além da chave primária em `id`.** Existe só para ser o alvo de uma foreign key composta: `wallet_ledger_entries` referencia `wallets (id, currency)` via `fk_ledger_wallet_currency`, não só `wallet_id → wallets(id)`. Com FK simples o banco aceitaria um lançamento em USD numa wallet BRL; a FK composta torna isso irrepresentável. Alternativas descartadas: não guardar `currency` no ledger (o lançamento deixaria de ser autossuficiente, exigiria JOIN com `wallets` para reconstruir o `Money` ou auditar isoladamente) e validar a moeda por trigger (código procedural para algo que uma FK declarativa já resolve, mais simples e mais rápida).
 
@@ -178,11 +178,11 @@ Os triggers **nunca escrevem dados**. Um erro `WL00x` em produção indica bug, 
 - Sem `ALTER DEFAULT PRIVILEGES`: cada tabela nova recebe GRANT explícito.
 - Permissão não é igual em todas as tabelas — cada uma recebe só o verbo que seu papel exige:
 
-| Tabela                                              | Permissões                      | Por quê                                                              |
-| ---------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------- |
-| `wallets`, `wager_transactions`, `inbox_messages`    | `SELECT`, `INSERT`, `UPDATE`     | Tabelas operacionais: mudam de estado, mas uma linha nunca é apagada |
-| `outbox_messages`                                    | `SELECT`, `INSERT`, `UPDATE`, `DELETE` | Evento já publicado pode ser limpo                                   |
-| `wallet_ledger_entries`                              | `SELECT`, `INSERT`               | Ledger é append-only: `wagering_app` não tem `UPDATE` nem `DELETE` — a permissão em si já impede alteração, mesmo antes do trigger `WL001` entrar em ação |
+| Tabela                                            | Permissões                             | Por quê                                                                                                                                                   |
+| ------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `wallets`, `wager_transactions`, `inbox_messages` | `SELECT`, `INSERT`, `UPDATE`           | Tabelas operacionais: mudam de estado, mas uma linha nunca é apagada                                                                                      |
+| `outbox_messages`                                 | `SELECT`, `INSERT`, `UPDATE`, `DELETE` | Evento já publicado pode ser limpo                                                                                                                        |
+| `wallet_ledger_entries`                           | `SELECT`, `INSERT`                     | Ledger é append-only: `wagering_app` não tem `UPDATE` nem `DELETE` — a permissão em si já impede alteração, mesmo antes do trigger `WL001` entrar em ação |
 
 **Consequências.** O ledger fica protegido por duas camadas independentes: permissão (`42501`) e trigger (`WL001`).
 
@@ -729,189 +729,3 @@ real do `SqsPollingConsumer` (LocalStack); `outbox-relay.test.ts` cobre
 
 **Consequências.** `/metrics` e `/health/*` ficam sempre abertos (sem guard), como o enunciado
 exige. OpenTelemetry e dashboard seguem opcionais, não implementados.
-
-## 6. Domínio e componentes compartilhados
-
-### 6.1 Erros do domínio
-
-| Tipo                      | Exemplos                                                    | Significado                  | Tratamento                                     |
-| ------------------------- | ----------------------------------------------------------- | ---------------------------- | ---------------------------------------------- |
-| `DomainError`             | `INSUFFICIENT_FUNDS`, `CURRENCY_MISMATCH`, `INVALID_AMOUNT` | Situação de negócio prevista | Transação REJECTED com `failureCode`, HTTP 422 |
-| `InvariantViolationError` | Lançamento desbalanceado, movimento de valor zero           | Bug                          | Erro interno e alarme; nunca vira rejeição     |
-
-`InvariantViolationError` estende `Error`, não `DomainError`: um tratamento do tipo
-`if (error instanceof DomainError) rejeitar()` nunca transforma um bug em rejeição de negócio.
-
-### 6.2 `Money`
-
-| Método                                                       | Comportamento                                                                         |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| `Money.from(props)`                                          | Valida e normaliza; lança `InvalidMoneyError` (`INVALID_AMOUNT` / `INVALID_CURRENCY`) |
-| `Money.zero(currency)`                                       | Zero na moeda                                                                         |
-| `add`, `subtract`                                            | Exatos; lançam `CurrencyMismatchError` entre moedas diferentes                        |
-| `negate`                                                     | Inverte o sinal; `-0` é normalizado para `0.00`                                       |
-| `isZero`, `isPositive`, `isNegative`, `isLessThan`, `equals` | Consultas                                                                             |
-| `amount`                                                     | String com 2 casas, usada na persistência                                             |
-| `toJSON()`                                                   | `MoneyProps`                                                                          |
-| `toString()`                                                 | `"25.00 BRL"`, para logs                                                              |
-
-Decisões e interpretações: ADR-004.
-
-### 6.3 Portas compartilhadas
-
-| Porta                | Implementação                          | Fake de teste                   |
-| -------------------- | -------------------------------------- | ------------------------------- |
-| `Clock`              | `SystemClock`                          | `FixedClock` (tempo controlado) |
-| `IdGenerator`        | `UuidV7Generator` (`Bun.randomUUIDv7`) | `SequentialIdGenerator`         |
-| `TransactionManager` | etapa 9 (MikroORM)                     | —                               |
-
-Cada porta exporta um token `Symbol` para injeção no Nest, sem importar o Nest.
-O domínio nunca gera ids nem lê o relógio: recebe ambos da camada de aplicação.
-
-### 6.4 Hash canônico
-
-`payloadHash = SHA-256(JCS(payload))`, em hex minúsculo de 64 caracteres (RFC 8785).
-
-- Chaves ordenadas por unidade UTF-16; sem espaços; propriedades `undefined` omitidas.
-- Rejeita o que não é JSON puro (`NaN`, `Infinity`, `Date`, `Money`, classes):
-  a conversão para JSON é explícita, para o hash nunca depender de um `toJSON` implícito.
-- Os campos que entram no hash são definidos pelo caso de uso (etapa 11).
-
-### 6.5 UUIDv7
-
-Ids ordenáveis pelo tempo: inserções sempre no fim dos índices B-tree,
-sem colisão entre instâncias.
-
-### 6.6 `Wallet` (aggregate root) e `WalletLedgerEntry`
-
-- `debit` e `credit` devolvem o `WalletLedgerEntry` correspondente: não existe caminho
-  que mude o saldo sem produzir o lançamento.
-- `Wallet.open` devolve a wallet (versão 1) e, se o saldo inicial for > 0, o lançamento
-  OPENING (CREDIT v1, 0 → saldo inicial). Adaptação da assinatura do enunciado.
-- O lançamento é criado antes de alterar a wallet: uma operação que falha não deixa rastro.
-- `version` começa em 1 e sobe 1 a cada movimento; operações recusadas não a alteram.
-- `canDebit` permite consultar se um débito cabe no saldo sem lançar exceção.
-- `WalletLedgerEntry` é estruturalmente imutável (sem métodos de mutação, `Object.freeze`).
-  `create` valida aritmética, moedas, valor positivo, saldos não negativos e versão;
-  `rehydrate` não valida, e `isBalanced()` permite detectar inconsistências na leitura.
-- `signedMoney()` devolve o valor com sinal; a soma de todos os lançamentos reconstrói o saldo.
-- `walletVersion` foi acrescentado ao lançamento, espelhando `uq_ledger_wallet_version`.
-
-A wallet não distingue débito de aposta e de reversão: o caso de uso traduz
-`INSUFFICIENT_FUNDS` para `REVERSAL_INSUFFICIENT_FUNDS` quando o débito vem de um ROLLBACK.
-
-### 6.7 `WagerTransaction`
-
-| De                          | Ação                                | Para                                 |
-| --------------------------- | ----------------------------------- | ------------------------------------ |
-| PENDING                     | `markProcessed` / `reject` / `fail` | PROCESSED / REJECTED / FAILED        |
-| PENDING                     | `markPendingReference`              | PENDING_REFERENCE                    |
-| PENDING_REFERENCE           | `rescheduleReferenceLookup`         | PENDING_REFERENCE (`attempts` + 1)   |
-| PENDING_REFERENCE           | `markProcessed` / `reject` / `fail` | PROCESSED / REJECTED / FAILED        |
-| PROCESSED, REJECTED, FAILED | qualquer                            | `InvalidTransactionStateError` (bug) |
-
-- `create` valida o payload: OPENING e o provider `system` são reservados; REFUND/ROLLBACK
-  exigem referência; BET/LOSS não aceitam; valor zero é recusado. Esses erros são
-  `InvalidWagerTransactionError` (HTTP 400) e não são persistidos.
-- `createOpening` é o único caminho para criar OPENING (caso de uso de criar wallet).
-- `markProcessed` e `reject` recebem o saldo observado (`balanceSnapshot`), devolvido no replay.
-- `reject` só aceita códigos de rejeição; `fail`, só códigos de falha.
-- `ledgerDirectionFor`: BET debita; OPENING, WIN e REFUND creditam; ROLLBACK inverte a referência;
-  LOSS não tem direção.
-- `insufficientFundsFailureCode()`: `REVERSAL_INSUFFICIENT_FUNDS` para ROLLBACK,
-  `INSUFFICIENT_FUNDS` para o resto.
-
-### 6.8 Política de referência
-
-| Transação | Pode referenciar |
-| --------- | ---------------- |
-| WIN       | BET (opcional)   |
-| REFUND    | BET              |
-| ROLLBACK  | BET, WIN, REFUND |
-
-Ordem de avaliação: tipo → contexto (provider, player, wallet, moeda, rodada) →
-referência PROCESSED → valor igual (só reversões) → ainda não revertida (só reversões).
-A política devolve o `FailureCode`, sem lançar; o fato "já revertida" é consultado pelo caso de uso.
-
-### 6.9 `FailureCode`
-
-| Código                        | Status           | Ação do provedor |
-| ----------------------------- | ---------------- | ---------------- |
-| `INSUFFICIENT_FUNDS`          | REJECTED         | Desistir         |
-| `REVERSAL_INSUFFICIENT_FUNDS` | REJECTED         | Escalar          |
-| `CURRENCY_MISMATCH`           | REJECTED         | Corrigir payload |
-| `WALLET_NOT_FOUND`            | (não persistido) | Corrigir payload |
-| `WALLET_PLAYER_MISMATCH`      | REJECTED         | Corrigir payload |
-| `REFERENCE_NOT_FOUND`         | REJECTED         | Escalar          |
-| `REFERENCE_CONTEXT_MISMATCH`  | REJECTED         | Corrigir payload |
-| `REFERENCE_INVALID_KIND`      | REJECTED         | Corrigir payload |
-| `REFERENCE_NOT_PROCESSED`     | REJECTED         | Desistir         |
-| `REFERENCE_ALREADY_REVERSED`  | REJECTED         | Desistir         |
-| `AMOUNT_MISMATCH`             | REJECTED         | Corrigir payload |
-| `INFRA_RETRIES_EXHAUSTED`     | FAILED           | Reenviar depois  |
-
-### 6.10 Eventos de integração
-
-| Evento                             | Quando                                      | Módulo   |
-| ---------------------------------- | ------------------------------------------- | -------- |
-| `WagerTransactionProcessed`        | Qualquer transação aplicada, inclusive LOSS | wagering |
-| `WagerTransactionRejected`         | Rejeição de negócio                         | wagering |
-| `WagerTransactionPendingReference` | Referência ausente                          | wagering |
-| `WalletBalanceChanged`             | Somente quando o saldo muda                 | wallet   |
-
-- `aggregateId` é sempre o `walletId` (vira `MessageGroupId` no SQS FIFO).
-- `eventType` e `version` ficam no tipo de cada subclasse.
-- `data` é só JSON puro: `MoneyProps`, datas em ISO-8601, `null` em vez de `undefined`.
-- Cada `from` confere o estado: não há evento de transação pendente marcada como processada.
-
-### 6.11 Backoff exponencial
-
-`delay = min(teto, base × 2^(tentativa − 1))`, com **equal jitter**
-(espera sorteada entre a metade e o valor exponencial).
-
-- Equal jitter espalha os retries de várias instâncias sem nunca esperar zero.
-- A fonte de aleatoriedade é injetável; testes usam `jitter: 'none'`.
-- Reaproveitado na outbox (aqui), no consumer SQS (etapa 14) e nas pendências de referência (etapa 16).
-
-### 6.12 `InboxMessage` e `OutboxMessage`
-
-|                            | Inbox                                            | Outbox                                                     |
-| -------------------------- | ------------------------------------------------ | ---------------------------------------------------------- |
-| Papel                      | Registro de mensagem recebida já processada      | Evento à espera de publicação                              |
-| Criação                    | `receive` (valida ids e hash)                    | `enqueue(evento)` (payload = envelope do evento)           |
-| Estado                     | `processedAt`                                    | `attempts`, `nextAttemptAt`, `publishedAt`, `lastError`    |
-| Duplicata entre instâncias | PK `(consumer_name, message_id)` + `ON CONFLICT` | `UPDATE ... WHERE published_at IS NULL` + lease (etapa 15) |
-
-**Outbox sem limite de tentativas.** O enunciado proíbe perder eventos confirmados.
-O limite é sobre o intervalo (teto de 5 min), não sobre o número de tentativas.
-Evento que não sai fica visível pela métrica de lag e por `attempts`.
-
-- Evento recém-enfileirado já está vencido (`nextAttemptAt = occurredAt`).
-- O backoff conta a partir do momento da falha, não da data do evento.
-- `markPublished` e `markProcessed` repetidos são bug; a duplicata real entre
-  instâncias é resolvida no banco.
-- O lease dos relays (`locked_until`, `locked_by`) fica fora do domínio: é mecanismo
-  de coordenação em SQL.
-
-### 6.13 `CreateWallet`
-
-Em uma única transação: wallet (v1) + transação OPENING (PROCESSED) + lançamento CREDIT
-
-- eventos `WagerTransactionProcessed` e `WalletBalanceChanged`.
-  Saldo inicial zero: só a wallet, sem OPENING, lançamento ou evento.
-  Duplicata de jogador + moeda: a `UNIQUE` do banco decide, mesmo sob concorrência (409).
-
-### 6.14 `ProcessWagerTransaction`
-
-Ordem da decisão, sob o lock: dono da wallet → moeda → referência (ausente: PENDING_REFERENCE;
-inválida: código da política) → LOSS (processa sem movimento) → saldo (débito sem saldo:
-INSUFFICIENT_FUNDS ou REVERSAL_INSUFFICIENT_FUNDS) → movimento.
-
-| Resultado               | HTTP | Eventos                                              |
-| ----------------------- | ---- | ---------------------------------------------------- |
-| PROCESSED com movimento | 200  | `WagerTransactionProcessed` + `WalletBalanceChanged` |
-| PROCESSED (LOSS)        | 200  | `WagerTransactionProcessed`                          |
-| REJECTED                | 422  | `WagerTransactionRejected`                           |
-| PENDING_REFERENCE       | 202  | `WagerTransactionPendingReference`                   |
-
-O mesmo caso de uso atende HTTP e SQS (`causationId` = messageId).
