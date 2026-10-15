@@ -7,7 +7,7 @@ exatamente **um** lançamento `DEBIT`.
 
 A unidade de concorrência é a `walletId`. A estratégia é lock pessimista (`SELECT ... FOR UPDATE`)
 mais uma checagem otimista de `version` no `UPDATE` — cinto e suspensório (ADR-010 no
-`ARCHITECTURE.md`).
+`ARCHITECTURE.pt.md`).
 
 ```mermaid
 sequenceDiagram

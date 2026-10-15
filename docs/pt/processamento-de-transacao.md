@@ -90,7 +90,7 @@ Esse último ramo (`Race`) é o único jeito de duas requisições com a **mesma
 **wallets diferentes** colidirem: como o lock é por wallet, elas não disputam o mesmo lock —
 quem commita primeiro grava a key; a outra recebe `DuplicateWagerTransactionError` do banco
 (`UNIQUE(idempotency_key)`), relê numa transação nova e decide replay ou conflito. Ver
-`ARCHITECTURE.md` (ADR-011) para o algoritmo exato do `payloadHash`.
+`ARCHITECTURE.pt.md` (ADR-011) para o algoritmo exato do `payloadHash`.
 
 ## Diferenças entre o canal HTTP e o canal SQS
 

@@ -10,7 +10,7 @@ export interface AuthConfig {
  * falha o boot, em vez de a aplicação silenciosamente "decidir" rodar em modo inseguro.
  *
  *  - AUTH_MODE ausente            → erro (precisa ser explícito)
- *  - AUTH_MODE=keycloak           → erro (adapter ainda não existe; ver ARCHITECTURE.md)
+ *  - AUTH_MODE=keycloak           → erro (adapter ainda não existe; ver ARCHITECTURE.pt.md)
  *  - AUTH_MODE=noop, NODE_ENV=production → erro (no-op nunca valida credencial de verdade)
  *  - AUTH_MODE=noop, NODE_ENV=development|test → ok
  *  - qualquer outro valor         → erro
@@ -29,7 +29,7 @@ export function authConfigFromEnv(
   if (mode === 'keycloak') {
     throw new Error(
       'AUTH_MODE=keycloak is configured, but the Keycloak adapter is not implemented yet. ' +
-        'See ARCHITECTURE.md for the planned integration.',
+        'See ARCHITECTURE.en.md for the planned integration.',
     );
   }
   if (mode !== 'noop') {

@@ -4,7 +4,7 @@ Serviço que processa transações financeiras de apostas (BET, WIN, LOSS, REFUN
 
 O princípio de projeto é simples: **nenhuma garantia financeira depende de uma única camada.** O domínio decide, o lock serializa, a idempotência é persistente, e o próprio PostgreSQL recusa (por constraints, triggers e permissões) qualquer estado em que o saldo divirja do ledger.
 
-As decisões de arquitetura, alternativas e trade-offs estão em [ARCHITECTURE.md](ARCHITECTURE.md).
+As decisões de arquitetura, alternativas e trade-offs estão em [ARCHITECTURE.pt.md](ARCHITECTURE.pt.md).
 
 ---
 
@@ -494,7 +494,7 @@ Envelope:
 Logs JSON estruturados (`correlationId`, `requestId`, `messageId`, `transactionId`, `walletId`,
 `providerId` — nunca payload financeiro completo), health checks separados e métricas Prometheus
 em `GET /metrics` (texto plano, sem autenticação). Detalhes de desenho em
-[ARCHITECTURE.md](ARCHITECTURE.md) (ADR-017).
+[ARCHITECTURE.pt.md](ARCHITECTURE.pt.md) (ADR-017).
 
 ```sh
 curl -s localhost:3000/metrics
@@ -734,7 +734,7 @@ Cada módulo segue a mesma divisão: `domain` (regras puras, sem framework), `ap
 - **Ordem dos eventos entre relays.** Relays diferentes podem publicar eventos da mesma wallet fora de ordem. Os eventos carregam `walletVersion` para o consumidor ordenar.
 - **Entrega at-least-once.** Um relay que morre entre publicar e marcar republica o evento com o mesmo `eventId`. A deduplicação do SQS FIFO (5 minutos) costuma descartar a cópia; consumidores devem deduplicar pelo `eventId` de qualquer forma.
 - **Relógio das instâncias.** Leases de relay e scheduler usam o relógio de cada instância. Diferenças maiores que o lease (10 a 30 s) poderiam gerar trabalho duplicado, que é tolerado (idempotência e inbox).
-- **Sem autenticação real.** A estrutura (`ProviderIdentityPort`, `ProviderAuthGuard`, `CurrentProvider`, `AuthModule`) está pronta e documentada (ADR-008 no `ARCHITECTURE.md`), mas o adapter ligado hoje (`AUTH_MODE=noop`) é fictício e nenhum controller usa o Guard ainda — o `providerId` do corpo continua não verificado contra a identidade de quem chama.
+- **Sem autenticação real.** A estrutura (`ProviderIdentityPort`, `ProviderAuthGuard`, `CurrentProvider`, `AuthModule`) está pronta e documentada (ADR-008 no `ARCHITECTURE.pt.md`), mas o adapter ligado hoje (`AUTH_MODE=noop`) é fictício e nenhum controller usa o Guard ainda — o `providerId` do corpo continua não verificado contra a identidade de quem chama.
 - **Ajustes de saldo.** Não existe um caso de uso de ajuste manual auditável; a reconciliação detecta divergências, e a correção é um procedimento operacional.
 
-Detalhes, alternativas consideradas e justificativas: [ARCHITECTURE.md](ARCHITECTURE.md).
+Detalhes, alternativas consideradas e justificativas: [ARCHITECTURE.pt.md](ARCHITECTURE.pt.md).

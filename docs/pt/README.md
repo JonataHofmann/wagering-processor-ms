@@ -4,8 +4,8 @@ Esta pasta documenta, com diagramas [Mermaid](https://mermaid.js.org/), os princ
 **Distributed Wagering Processor**. Cada arquivo é autocontido: contexto curto, diagrama(s) e os
 arquivos de código que implementam o fluxo, pra navegar direto da documentação pro código.
 
-Para a visão de decisões arquiteturais (trade-offs, ADRs), ver [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
-Para setup, comandos e contrato HTTP, ver [`../README.md`](../README.md).
+Para a visão de decisões arquiteturais (trade-offs, ADRs), ver [`../../ARCHITECTURE.pt.md`](../../ARCHITECTURE.pt.md).
+Para setup, comandos e contrato HTTP, ver [`../../README.pt.md`](../../README.pt.md).
 
 ## Índice
 

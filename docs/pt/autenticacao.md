@@ -1,7 +1,7 @@
 # Autenticação (Port/Adapter, hoje no-op)
 
 A integração real com Keycloak **não está implementada** (decisão de escopo do enunciado — ver
-ADR-008 no `ARCHITECTURE.md`). O que existe é a estrutura completa, pronta pra trocar o adapter
+ADR-008 no `ARCHITECTURE.pt.md`). O que existe é a estrutura completa, pronta pra trocar o adapter
 sem tocar em Guard, decorator ou controller: `src/platform/auth/`.
 
 ## Fluxo (hoje, com o adapter no-op)
@@ -83,5 +83,5 @@ flowchart TD
 - `src/platform/auth/no-op-provider-identity.adapter.ts`
 - `src/platform/auth/auth.config.ts` — validação fail-fast de `AUTH_MODE`/`NODE_ENV`.
 - `src/platform/auth/provider-auth.guard.ts`, `current-provider.decorator.ts`, `auth.module.ts`.
-- `ARCHITECTURE.md` (ADR-008) — desenho completo da integração futura.
+- `ARCHITECTURE.pt.md` (ADR-008) — desenho completo da integração futura.
 - `test/unit/platform/auth/` — cobertura de cada peça.

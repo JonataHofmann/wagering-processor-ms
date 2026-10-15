@@ -6,7 +6,7 @@ export const FailureCode = {
    * NUNCA aparece em WagerTransaction.failureCode: wallet inexistente corta o fluxo
    * em ResourceNotFoundError (404) antes de qualquer WagerTransaction ser criada —
    * não há transação pra persistir o código. Existe aqui só para completar a
-   * taxonomia documentada ao provedor (ver ARCHITECTURE.md §6.9, "não persistido").
+   * taxonomia documentada ao provedor (ver ARCHITECTURE.pt.md §6.9, "não persistido").
    */
   WalletNotFound: 'WALLET_NOT_FOUND',
   WalletPlayerMismatch: 'WALLET_PLAYER_MISMATCH',
