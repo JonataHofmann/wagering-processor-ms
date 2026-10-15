@@ -200,6 +200,23 @@ test('reinício do serviço no meio da carga: consistência final completa', asy
     ),
   );
 
+  // sonda contínua e barata (/health/live, sem tocar o banco) só para garantir que
+  // SEMPRE haja uma requisição em voo no instante exato de cada kill — sem isso,
+  // cluster.retries depende de o tráfego de negócio coincidir por acaso com a
+  // janela de poucos ms do SIGKILL/SIGTERM, o que é visivelmente instável.
+  let probing = true;
+  const probe = (async () => {
+    while (probing) {
+      try {
+        const response = await cluster.request('/health/live');
+        await response.text();
+      } catch {
+        // instância morta durante a sonda: cluster.request já reencaminha
+      }
+      await Bun.sleep(10);
+    }
+  })();
+
   // caos em paralelo com a carga
   const chaos = (async () => {
     await Bun.sleep(600);
@@ -216,6 +233,8 @@ test('reinício do serviço no meio da carga: consistência final completa', asy
 
   const keysPerWallet = await Promise.all(plans.map((p) => runWallet(p, api)));
   await chaos;
+  probing = false;
+  await probe;
   const allKeys = keysPerWallet.flat();
 
   // ---------- convergência: o sistema termina sozinho tudo o que aceitou ----------
@@ -311,7 +330,8 @@ test('reinício do serviço no meio da carga: consistência final completa', asy
     divergent: 0,
   });
 
-  // o caos realmente aconteceu: o cliente precisou reenviar requisições
+  // o caos realmente aconteceu: o cliente precisou reenviar requisições (garantido
+  // pela sonda contínua acima, não só pela coincidência com a carga de negócio)
   console.log(
     `client retries during chaos: ${cluster.retries}; events published: ${published.length} for ${outboxIds.size} outbox rows`,
   );
