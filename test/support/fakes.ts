@@ -1,7 +1,7 @@
 import { Clock } from '@/src/shared/application/ports/clock.port';
 import { IdGenerator } from '@/src/shared/application/ports/id-generator.port';
 
-/** Relógio controlado pelo teste: só anda quando mandarem. */
+/** Clock controlled by the test: only moves when told to. */
 export class FixedClock implements Clock {
   private current: Date;
 
@@ -10,7 +10,7 @@ export class FixedClock implements Clock {
   }
 
   now(): Date {
-    return new Date(this.current); // cópia: quem recebe não altera o relógio
+    return new Date(this.current); // copy: whoever receives it can't alter the clock
   }
 
   advance(ms: number): void {
@@ -22,7 +22,7 @@ export class FixedClock implements Clock {
   }
 }
 
-/** Ids previsíveis e válidos como UUID: 00000000-0000-7000-8000-000000000001, ...002, ... */
+/** Predictable, UUID-valid ids: 00000000-0000-7000-8000-000000000001, ...002, ... */
 export class SequentialIdGenerator implements IdGenerator {
   private counter = 0;
 

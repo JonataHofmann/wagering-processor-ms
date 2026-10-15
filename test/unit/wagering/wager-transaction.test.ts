@@ -37,10 +37,10 @@ function validationCode(fn: () => unknown): string | undefined {
   }
 }
 
-// ================================================================= regras por kind
+// ================================================================= rules per kind
 
 describe('BET', () => {
-  test('nasce PENDING, debita, move saldo e não aceita referência', () => {
+  test('starts PENDING, debits, moves balance and does not accept a reference', () => {
     const bet = buildTransaction({ kind: Kind.Bet });
     expect(bet.status).toBe(Status.Pending);
     expect(bet.attempts).toBe(0);
@@ -57,7 +57,7 @@ describe('BET', () => {
     ).toBe('REFERENCE_NOT_ALLOWED');
   });
 
-  test('saldo insuficiente em BET é INSUFFICIENT_FUNDS', () => {
+  test('insufficient balance in BET is INSUFFICIENT_FUNDS', () => {
     expect(
       buildTransaction({ kind: Kind.Bet }).insufficientFundsFailureCode(),
     ).toBe(FailureCode.InsufficientFunds);
@@ -65,7 +65,7 @@ describe('BET', () => {
 });
 
 describe('WIN', () => {
-  test('credita, com ou sem referência à BET', () => {
+  test('credits, with or without a reference to BET', () => {
     const bet = buildTransaction();
     const winWithRef = buildReferencing(Kind.Win, bet);
     const winWithoutRef = buildTransaction({ kind: Kind.Win });
@@ -80,7 +80,7 @@ describe('WIN', () => {
 });
 
 describe('LOSS', () => {
-  test('não move saldo, não tem direção de lançamento e não aceita referência', () => {
+  test('does not move balance, has no ledger direction and does not accept a reference', () => {
     const loss = buildTransaction({ kind: Kind.Loss });
     expect(loss.affectsBalance()).toBe(false);
     expect(() => loss.ledgerDirectionFor()).toThrow(InvariantViolationError);
@@ -96,7 +96,7 @@ describe('LOSS', () => {
 });
 
 describe('REFUND', () => {
-  test('exige referência e credita', () => {
+  test('requires a reference and credits', () => {
     expect(validationCode(() => buildTransaction({ kind: Kind.Refund }))).toBe(
       'REFERENCE_REQUIRED',
     );
@@ -117,7 +117,7 @@ describe('REFUND', () => {
 });
 
 describe('ROLLBACK', () => {
-  test('exige referência', () => {
+  test('requires a reference', () => {
     expect(
       validationCode(() => buildTransaction({ kind: Kind.Rollback })),
     ).toBe('REFERENCE_REQUIRED');
@@ -128,7 +128,7 @@ describe('ROLLBACK', () => {
     ['WIN', Kind.Win, LedgerDirection.Debit],
     ['REFUND', Kind.Refund, LedgerDirection.Debit],
   ])(
-    'ROLLBACK de %s inverte a direção da referência',
+    'ROLLBACK of %s reverses the direction of the reference',
     (_, referenceKind, expected) => {
       const reference =
         referenceKind === Kind.Refund
@@ -139,14 +139,14 @@ describe('ROLLBACK', () => {
     },
   );
 
-  test('sem a referência em mãos não há como definir a direção', () => {
+  test('without the reference in hand there is no way to determine the direction', () => {
     const rollback = buildReferencing(Kind.Rollback, buildTransaction());
     expect(() => rollback.ledgerDirectionFor()).toThrow(
       InvariantViolationError,
     );
   });
 
-  test('saldo insuficiente em ROLLBACK é REVERSAL_INSUFFICIENT_FUNDS, distinto da aposta', () => {
+  test('insufficient balance in ROLLBACK is REVERSAL_INSUFFICIENT_FUNDS, distinct from the bet', () => {
     const rollback = buildReferencing(
       Kind.Rollback,
       buildTransaction({ kind: Kind.Win }),
@@ -157,14 +157,14 @@ describe('ROLLBACK', () => {
   });
 });
 
-describe('validação do payload', () => {
-  test('OPENING não pode ser submetido por provedor', () => {
+describe('payload validation', () => {
+  test('OPENING cannot be submitted by a provider', () => {
     expect(validationCode(() => buildTransaction({ kind: Kind.Opening }))).toBe(
       'OPENING_NOT_ALLOWED',
     );
   });
 
-  test('o provider "system" é reservado', () => {
+  test('the "system" provider is reserved', () => {
     expect(
       validationCode(() =>
         buildTransaction({ providerId: SYSTEM_PROVIDER_ID }),
@@ -172,17 +172,17 @@ describe('validação do payload', () => {
     ).toBe('RESERVED_PROVIDER');
   });
 
-  test('valor zero é recusado', () => {
+  test('zero amount is rejected', () => {
     expect(validationCode(() => buildTransaction({ money: brl('0.00') }))).toBe(
       'NON_POSITIVE_AMOUNT',
     );
   });
 
-  test('erros de validação são DomainError (viram HTTP 400)', () => {
+  test('validation errors are DomainError (become HTTP 400)', () => {
     expect(() => buildTransaction({ kind: Kind.Opening })).toThrow(DomainError);
   });
 
-  test('createOpening gera a transação interna da abertura', () => {
+  test('createOpening generates the internal opening transaction', () => {
     const opening = WagerTransaction.createOpening({
       id: 'tx-open',
       walletId: 'w-1',
@@ -198,10 +198,10 @@ describe('validação do payload', () => {
   });
 });
 
-// ================================================================= transições
+// ================================================================= transitions
 
-describe('transições a partir de PENDING', () => {
-  test('→ PROCESSED registra data e saldo observado', () => {
+describe('transitions from PENDING', () => {
+  test('→ PROCESSED records the date and observed balance', () => {
     const bet = buildTransaction();
     bet.markProcessed({ at: LATER, balanceSnapshot: brl('90.00') });
     expect(bet.status).toBe(Status.Processed);
@@ -210,7 +210,7 @@ describe('transições a partir de PENDING', () => {
     expect(bet.isTerminal()).toBe(true);
   });
 
-  test('→ REJECTED registra o código e o saldo observado', () => {
+  test('→ REJECTED records the code and observed balance', () => {
     const bet = buildTransaction();
     bet.reject(FailureCode.InsufficientFunds, { balanceSnapshot: brl('5.00') });
     expect(bet.status).toBe(Status.Rejected);
@@ -218,14 +218,14 @@ describe('transições a partir de PENDING', () => {
     expect(bet.balanceSnapshot?.amount).toBe('5.00');
   });
 
-  test('→ FAILED registra o código de falha', () => {
+  test('→ FAILED records the failure code', () => {
     const bet = buildTransaction();
     bet.fail(FailureCode.InfraRetriesExhausted);
     expect(bet.status).toBe(Status.Failed);
     expect(bet.failureCode).toBe(FailureCode.InfraRetriesExhausted);
   });
 
-  test('reject só aceita códigos de rejeição; fail só aceita códigos de falha', () => {
+  test('reject only accepts rejection codes; fail only accepts failure codes', () => {
     expect(() =>
       buildTransaction().reject(FailureCode.InfraRetriesExhausted, {
         balanceSnapshot: brl('1.00'),
@@ -237,8 +237,8 @@ describe('transições a partir de PENDING', () => {
   });
 });
 
-describe('ciclo de PENDING_REFERENCE', () => {
-  test('espera, tenta de novo e processa quando a referência chega', () => {
+describe('PENDING_REFERENCE cycle', () => {
+  test('waits, retries and processes when the reference arrives', () => {
     const bet = processed(buildTransaction());
     const refund = buildReferencing(Kind.Refund, bet);
 
@@ -259,7 +259,7 @@ describe('ciclo de PENDING_REFERENCE', () => {
     expect(refund.referenceTransactionId).toBe(bet.id);
   });
 
-  test('expira e vira REJECTED com REFERENCE_NOT_FOUND', () => {
+  test('expires and becomes REJECTED with REFERENCE_NOT_FOUND', () => {
     const refund = buildReferencing(Kind.Refund, buildTransaction());
     refund.markPendingReference({ nextAttemptAt: LATER, expiresAt: EXPIRES });
 
@@ -272,7 +272,7 @@ describe('ciclo de PENDING_REFERENCE', () => {
     expect(refund.status).toBe(Status.Rejected);
   });
 
-  test('só espera quem tem referência', () => {
+  test('only something with a reference can wait', () => {
     expect(() =>
       buildTransaction().markPendingReference({
         nextAttemptAt: LATER,
@@ -281,7 +281,7 @@ describe('ciclo de PENDING_REFERENCE', () => {
     ).toThrow(InvariantViolationError);
   });
 
-  test('reagendar só faz sentido em PENDING_REFERENCE', () => {
+  test('rescheduling only makes sense in PENDING_REFERENCE', () => {
     expect(() =>
       buildReferencing(
         Kind.Refund,
@@ -290,7 +290,7 @@ describe('ciclo de PENDING_REFERENCE', () => {
     ).toThrow(InvalidTransactionStateError);
   });
 
-  test('processar exige a referência resolvida, e só quando houver referência', () => {
+  test('processing requires the resolved reference, and only when there is a reference', () => {
     const refund = buildReferencing(Kind.Refund, buildTransaction());
     expect(() =>
       refund.markProcessed({ at: LATER, balanceSnapshot: brl('1.00') }),
@@ -307,9 +307,9 @@ describe('ciclo de PENDING_REFERENCE', () => {
   });
 });
 
-// ================================================================= estados terminais
+// ================================================================= terminal states
 
-describe('estados terminais', () => {
+describe('terminal states', () => {
   const makeTerminal: Record<string, () => WagerTransaction> = {
     PROCESSED: () => processed(buildTransaction()),
     REJECTED: () => {
@@ -341,7 +341,7 @@ describe('estados terminais', () => {
     Object.keys(actions).map((action) => [status, action] as const),
   );
 
-  test.each(cases)('%s não aceita %s e permanece igual', (status, action) => {
+  test.each(cases)('%s does not accept %s and remains unchanged', (status, action) => {
     const tx = makeTerminal[status]!();
     const before = {
       status: tx.status,
@@ -357,18 +357,18 @@ describe('estados terminais', () => {
     }).toEqual(before);
   });
 
-  test('transição ilegal é bug, não regra de negócio', () => {
+  test('illegal transition is a bug, not a business rule', () => {
     const tx = processed(buildTransaction());
     try {
       tx.fail(FailureCode.InfraRetriesExhausted);
-      throw new Error('deveria ter lançado');
+      throw new Error('should have thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(InvariantViolationError);
       expect(error).not.toBeInstanceOf(DomainError);
     }
   });
 
-  test('isTerminal só é verdadeiro para PROCESSED, REJECTED e FAILED', () => {
+  test('isTerminal is only true for PROCESSED, REJECTED and FAILED', () => {
     expect(buildTransaction().isTerminal()).toBe(false);
     for (const make of Object.values(makeTerminal))
       expect(make().isTerminal()).toBe(true);
@@ -378,19 +378,19 @@ describe('estados terminais', () => {
 // ================================================================= matchesPayload
 
 describe('matchesPayload', () => {
-  test('mesmo hash é o mesmo payload (replay)', () => {
+  test('same hash is the same payload (replay)', () => {
     expect(
       buildTransaction({ payloadHash: HASH_A }).matchesPayload(HASH_A),
     ).toBe(true);
   });
 
-  test('hash diferente é conflito, não replay', () => {
+  test('different hash is a conflict, not a replay', () => {
     expect(
       buildTransaction({ payloadHash: HASH_A }).matchesPayload('b'.repeat(64)),
     ).toBe(false);
   });
 
-  test('a comparação é exata (sem normalização de caixa)', () => {
+  test('the comparison is exact (no case normalization)', () => {
     expect(
       buildTransaction({ payloadHash: HASH_A }).matchesPayload(
         HASH_A.toUpperCase(),
@@ -398,7 +398,7 @@ describe('matchesPayload', () => {
     ).toBe(false);
   });
 
-  test('funciona igual em transações terminais', () => {
+  test('works the same in terminal transactions', () => {
     expect(
       processed(buildTransaction({ payloadHash: HASH_A })).matchesPayload(
         HASH_A,
@@ -410,7 +410,7 @@ describe('matchesPayload', () => {
 // ================================================================= rehydrate
 
 describe('rehydrate', () => {
-  test('restaura estado terminal sem revalidar, e as transições continuam bloqueadas', () => {
+  test('restores terminal state without revalidating, and transitions remain blocked', () => {
     const tx = WagerTransaction.rehydrate({
       id: 'tx-db',
       providerId: 'provider-a',

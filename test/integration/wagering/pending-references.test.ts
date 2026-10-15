@@ -17,7 +17,7 @@ import {
 } from '@/test/support/wagering-client';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
-// tempos curtos: o teste não espera 15 minutos para provar a expiração
+// short times: the test doesn't wait 15 minutes to prove expiration
 const LOOKUP = { backoffBaseMs: 100, backoffMaxMs: 400, ttlMs: 1_500 };
 
 let t: TestApp;
@@ -27,11 +27,11 @@ let transactions: WagerTransactionRepository;
 let tm: TransactionManager;
 
 beforeAll(async () => {
-  // este arquivo testa resolver/claimDuePendingReferences diretamente, nunca via
-  // o scheduler em si (isso é o pending-reference-scheduler.test.ts). Sem papéis,
-  // o scheduler desta app roda sozinho em segundo plano — idleIntervalMs enorme
-  // evita que ele dispute as mesmas pendências que os testes reservam manualmente
-  // (a 1ª rodada roda vazia no boot, antes de qualquer pendência existir).
+  // this file tests resolver/claimDuePendingReferences directly, never via
+  // the scheduler itself (that's pending-reference-scheduler.test.ts). Without roles,
+  // this app's scheduler runs on its own in the background — a huge idleIntervalMs
+  // keeps it from competing for the same pending references the tests reserve manually
+  // (the 1st round runs empty on boot, before any pending reference exists).
   t = await startTestApp({
     referenceLookup: LOOKUP,
     scheduler: { batchSize: 20, leaseMs: 10_000, idleIntervalMs: 3_600_000 },
@@ -81,7 +81,7 @@ async function newWallet(balance: string): Promise<TestWallet> {
   return (await api.openWallet(balance)).wallet;
 }
 
-/** Envia uma operação que referencia um id externo que ainda não existe. */
+/** Sends an operation that references an external id that doesn't exist yet. */
 async function early(w: TestWallet, op: Operation) {
   const result = await api.submit(w, op);
   expect(result.status).toBe(202);
@@ -89,8 +89,8 @@ async function early(w: TestWallet, op: Operation) {
   return result;
 }
 
-describe('resolução de referências fora de ordem', () => {
-  test('REFUND antes da BET: reagenda enquanto falta, resolve quando a BET chega', async () => {
+describe('resolution of out-of-order references', () => {
+  test('REFUND before the BET: reschedules while missing, resolves when the BET arrives', async () => {
     const w = await newWallet('100.00');
     const betId = crypto.randomUUID();
     const refund = await early(w, {
@@ -99,7 +99,7 @@ describe('resolução de referências fora de ordem', () => {
       reference: betId,
     });
 
-    // a BET ainda não chegou: nova tentativa com backoff, sem evento novo
+    // the BET hasn't arrived yet: new attempt with backoff, no new event
     expect(await resolver.execute(refund.body.transactionId)).toBe(
       'rescheduled',
     );
@@ -110,7 +110,7 @@ describe('resolução de referências fora de ordem', () => {
       'WagerTransactionPendingReference',
     ]);
 
-    // a BET chega: debita e antecipa a pendência que esperava por ela
+    // the BET arrives: debits and brings forward the pending reference waiting for it
     const bet = await api.submit(w, {
       kind: 'BET',
       amount: '40.00',
@@ -133,7 +133,7 @@ describe('resolução de referências fora de ordem', () => {
     ]);
   });
 
-  test('ROLLBACK de WIN antes do WIN: resolvido como débito quando o WIN chega', async () => {
+  test('ROLLBACK of a WIN before the WIN: resolved as a debit when the WIN arrives', async () => {
     const w = await newWallet('10.00');
     const winId = crypto.randomUUID();
     const rollback = await early(w, {
@@ -150,7 +150,7 @@ describe('resolução de referências fora de ordem', () => {
     expect(await api.balanceOf(w)).toEqual({ amount: '10.00', version: 3 });
   });
 
-  test('a referência chega, mas não combina: resolvido como REJECTED pela política', async () => {
+  test("the reference arrives, but doesn't match: resolved as REJECTED by policy", async () => {
     const w = await newWallet('100.00');
     const betId = crypto.randomUUID();
     const refund = await early(w, {
@@ -159,7 +159,7 @@ describe('resolução de referências fora de ordem', () => {
       reference: betId,
     });
 
-    await api.submit(w, { kind: 'BET', amount: '25.00', externalId: betId }); // valor diferente
+    await api.submit(w, { kind: 'BET', amount: '25.00', externalId: betId }); // different amount
     expect(await resolver.execute(refund.body.transactionId)).toBe('resolved');
     expect(await rowOf(refund.body.transactionId)).toMatchObject({
       status: 'REJECTED',
@@ -170,7 +170,7 @@ describe('resolução de referências fora de ordem', () => {
     );
   });
 
-  test('prazo esgotado: REJECTED com REFERENCE_NOT_FOUND, evento, e o replay mostra o desfecho', async () => {
+  test('deadline expired: REJECTED with REFERENCE_NOT_FOUND, event, and the replay shows the outcome', async () => {
     const w = await newWallet('100.00');
     const op: Operation = {
       kind: 'REFUND',
@@ -191,7 +191,7 @@ describe('resolução de referências fora de ordem', () => {
       'WagerTransactionRejected',
     ]);
 
-    // o provedor reenviando a mesma requisição recebe o desfecho final
+    // the provider resending the same request receives the final outcome
     const replay = await api.submit(w, op);
     expect(replay.status).toBe(422);
     expect(replay.body).toMatchObject({
@@ -202,7 +202,7 @@ describe('resolução de referências fora de ordem', () => {
     expect(await api.balanceOf(w)).toEqual({ amount: '100.00', version: 1 });
   });
 
-  test('cadeia: ROLLBACK de um REFUND que espera a BET; os dois se resolvem em ordem', async () => {
+  test('chain: ROLLBACK of a REFUND waiting for the BET; both resolve in order', async () => {
     const w = await newWallet('100.00');
     const betId = crypto.randomUUID();
     const refundId = crypto.randomUUID();
@@ -213,7 +213,7 @@ describe('resolução de referências fora de ordem', () => {
       reference: betId,
       externalId: refundId,
     });
-    // o REFUND existe, mas ainda está pendente: o ROLLBACK espera em vez de ser rejeitado
+    // the REFUND exists, but is still pending: the ROLLBACK waits instead of being rejected
     const rollback = await early(w, {
       kind: 'ROLLBACK',
       amount: '40.00',
@@ -223,8 +223,8 @@ describe('resolução de referências fora de ordem', () => {
     await api.submit(w, { kind: 'BET', amount: '40.00', externalId: betId }); // 100 → 60
     expect(await resolver.execute(rollback.body.transactionId)).toBe(
       'rescheduled',
-    ); // REFUND ainda pendente
-    expect(await resolver.execute(refund.body.transactionId)).toBe('resolved'); // 60 → 100, antecipa o ROLLBACK
+    ); // REFUND still pending
+    expect(await resolver.execute(refund.body.transactionId)).toBe('resolved'); // 60 → 100, brings forward the ROLLBACK
     expect(
       (await rowOf(rollback.body.transactionId)).next_attempt_at!.getTime(),
     ).toBeLessThanOrEqual(Date.now());
@@ -235,7 +235,7 @@ describe('resolução de referências fora de ordem', () => {
     expect(await api.balanceOf(w)).toEqual({ amount: '60.00', version: 4 });
   });
 
-  test('resoluções simultâneas da mesma pendência: um único efeito', async () => {
+  test('simultaneous resolutions of the same pending reference: a single effect', async () => {
     const w = await newWallet('100.00');
     const betId = crypto.randomUUID();
     const refund = await early(w, {
@@ -255,7 +255,7 @@ describe('resolução de referências fora de ordem', () => {
     expect(await api.balanceOf(w)).toEqual({ amount: '100.00', version: 3 });
   });
 
-  test('o replay de uma pendência ainda aberta continua 202', async () => {
+  test('replay of a still-open pending reference stays 202', async () => {
     const w = await newWallet('100.00');
     const op: Operation = {
       kind: 'REFUND',
@@ -270,9 +270,9 @@ describe('resolução de referências fora de ordem', () => {
   });
 });
 
-describe('reserva de pendências vencidas', () => {
-  test('reservas simultâneas pegam conjuntos disjuntos, e o reservado sai da fila até a reserva vencer', async () => {
-    // limpa pendências de testes anteriores
+describe('reservation of expired pending references', () => {
+  test('simultaneous reservations grab disjoint sets, and the reserved ones leave the queue until the reservation expires', async () => {
+    // clears pending references from previous tests
     await queryOnce(
       t.db.appUrl,
       `UPDATE wager_transactions SET next_attempt_at = now() + interval '1 hour' WHERE status = 'PENDING_REFERENCE'`,
@@ -288,7 +288,7 @@ describe('reserva de pendências vencidas', () => {
         }),
       ),
     );
-    await Bun.sleep(LOOKUP.backoffBaseMs + 50); // todas vencidas
+    await Bun.sleep(LOOKUP.backoffBaseMs + 50); // all expired
 
     const now = new Date();
     const claims = await Promise.all(
@@ -304,12 +304,12 @@ describe('reserva de pendências vencidas', () => {
     );
 
     const claimed = claims.flat();
-    expect(new Set(claimed).size).toBe(claimed.length); // nenhuma pendência em duas reservas
+    expect(new Set(claimed).size).toBe(claimed.length); // no pending reference in two reservations
     expect(new Set(claimed)).toEqual(
       new Set(pending.map((p) => p.body.transactionId)),
     );
 
-    // reservadas: invisíveis até a reserva vencer
+    // reserved: invisible until the reservation expires
     expect(
       await tm.runInTransaction(() =>
         transactions.claimDuePendingReferences({

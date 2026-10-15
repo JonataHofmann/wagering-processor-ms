@@ -17,7 +17,7 @@ function domainErrorCode(fn: () => unknown): string | undefined {
   }
 }
 
-describe('Money.from: entradas válidas', () => {
+describe('Money.from: valid inputs', () => {
   test.each([
     ['25.00', '25.00'],
     ['0.00', '0.00'],
@@ -26,41 +26,41 @@ describe('Money.from: entradas válidas', () => {
     ['25.5', '25.50'],
     ['0.01', '0.01'],
     ['999999999999999999.99', '999999999999999999.99'],
-  ])('aceita %p e normaliza para %p', (input, expected) => {
+  ])('accepts %p and normalizes to %p', (input, expected) => {
     expect(brl(input).amount).toBe(expected);
   });
 
-  test('mantém a moeda', () => {
+  test('keeps the currency', () => {
     expect(usd('1.00').currency).toBe('USD');
   });
 });
 
-describe('Money.from: entradas inválidas', () => {
+describe('Money.from: invalid inputs', () => {
   test.each([
-    ['vazio', ''],
-    ['só espaço', ' '],
+    ['empty', ''],
+    ['only a space', ' '],
     ['NaN', 'NaN'],
     ['Infinity', 'Infinity'],
     ['-Infinity', '-Infinity'],
-    ['notação científica', '1e3'],
-    ['notação científica maiúscula', '1E3'],
-    ['notação científica com casas', '2.5e1'],
-    ['3 casas decimais', '10.005'],
-    ['4 casas decimais', '0.0001'],
-    ['negativo', '-1.00'],
-    ['negativo zero', '-0.00'],
-    ['sinal positivo', '+1.00'],
-    ['sem parte inteira', '.50'],
-    ['ponto sem casas', '5.'],
-    ['zero à esquerda', '01.00'],
-    ['vírgula decimal', '1,00'],
-    ['separador de milhar', '1,000.00'],
-    ['espaço à esquerda', ' 1.00'],
-    ['espaço à direita', '1.00 '],
-    ['texto', 'abc'],
+    ['scientific notation', '1e3'],
+    ['uppercase scientific notation', '1E3'],
+    ['scientific notation with decimals', '2.5e1'],
+    ['3 decimal places', '10.005'],
+    ['4 decimal places', '0.0001'],
+    ['negative', '-1.00'],
+    ['negative zero', '-0.00'],
+    ['positive sign', '+1.00'],
+    ['no integer part', '.50'],
+    ['point with no decimals', '5.'],
+    ['leading zero', '01.00'],
+    ['decimal comma', '1,00'],
+    ['thousands separator', '1,000.00'],
+    ['leading space', ' 1.00'],
+    ['trailing space', '1.00 '],
+    ['text', 'abc'],
     ['hexadecimal', '0x10'],
-    ['19 dígitos inteiros', '1000000000000000000.00'],
-  ])('rejeita %s (%p)', (_, input) => {
+    ['19 integer digits', '1000000000000000000.00'],
+  ])('rejects %s (%p)', (_, input) => {
     expect(domainErrorCode(() => brl(input))).toBe('INVALID_AMOUNT');
   });
 
@@ -68,14 +68,14 @@ describe('Money.from: entradas inválidas', () => {
     ['number', 25],
     ['null', null],
     ['undefined', undefined],
-    ['objeto', { value: '1.00' }],
-  ])('rejeita amount do tipo %s', (_, input) => {
+    ['object', { value: '1.00' }],
+  ])('rejects amount of type %s', (_, input) => {
     const props = { amount: input as unknown as string, currency: 'BRL' };
     expect(domainErrorCode(() => Money.from(props))).toBe('INVALID_AMOUNT');
   });
 
   test.each(['', 'brl', 'Brl', 'BR', 'BRLX', '123', 'R$'])(
-    'rejeita moeda %p',
+    'rejects currency %p',
     (currency) => {
       expect(
         domainErrorCode(() => Money.from({ amount: '1.00', currency })),
@@ -83,10 +83,10 @@ describe('Money.from: entradas inválidas', () => {
     },
   );
 
-  test('o erro é um DomainError com code estável', () => {
+  test('the error is a DomainError with a stable code', () => {
     try {
       brl('abc');
-      throw new Error('deveria ter lançado');
+      throw new Error('should have thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(InvalidMoneyError);
       expect(error).toBeInstanceOf(DomainError);
@@ -96,42 +96,42 @@ describe('Money.from: entradas inválidas', () => {
   });
 });
 
-describe('aritmética sem arredondamento', () => {
-  test('0.10 + 0.20 é exatamente 0.30 (em float seria 0.30000000000000004)', () => {
+describe('arithmetic without rounding', () => {
+  test('0.10 + 0.20 is exactly 0.30 (in float it would be 0.30000000000000004)', () => {
     expect(brl('0.10').add(brl('0.20')).amount).toBe('0.30');
   });
 
-  test('soma 0.01 mil vezes sem acumular erro', () => {
+  test('adds 0.01 a thousand times without accumulating error', () => {
     let total = Money.zero('BRL');
     for (let i = 0; i < 1000; i++) total = total.add(brl('0.01'));
     expect(total.amount).toBe('10.00');
   });
 
-  test('valores grandes mantêm os centavos', () => {
+  test('large values keep the cents', () => {
     expect(brl('999999999999999998.99').add(brl('1.00')).amount).toBe(
       '999999999999999999.99',
     );
   });
 
-  test('subtract pode ficar negativo (para checar saldo insuficiente)', () => {
+  test('subtract can go negative (to check insufficient balance)', () => {
     const result = brl('20.00').subtract(brl('80.00'));
     expect(result.amount).toBe('-60.00');
     expect(result.isNegative()).toBe(true);
   });
 
-  test('negate inverte o sinal', () => {
+  test('negate flips the sign', () => {
     expect(brl('25.00').negate().amount).toBe('-25.00');
     expect(brl('25.00').negate().negate().amount).toBe('25.00');
   });
 
-  test('negate de zero continua 0.00, nunca -0.00', () => {
+  test('negate of zero stays 0.00, never -0.00', () => {
     expect(Money.zero('BRL').negate().amount).toBe('0.00');
     expect(brl('5.00').subtract(brl('5.00')).negate().amount).toBe('0.00');
   });
 });
 
-describe('imutabilidade', () => {
-  test('operações devolvem nova instância e não alteram a original', () => {
+describe('immutability', () => {
+  test('operations return a new instance and do not change the original', () => {
     const original = brl('10.00');
     const sum = original.add(brl('5.00'));
     expect(sum).not.toBe(original);
@@ -139,7 +139,7 @@ describe('imutabilidade', () => {
     expect(sum.amount).toBe('15.00');
   });
 
-  test('a instância é congelada em tempo de execução', () => {
+  test('the instance is frozen at runtime', () => {
     const money = brl('10.00');
     expect(Object.isFrozen(money)).toBe(true);
     expect(() => {
@@ -148,7 +148,7 @@ describe('imutabilidade', () => {
   });
 });
 
-describe('consultas', () => {
+describe('queries', () => {
   test('isZero, isPositive, isNegative', () => {
     expect(Money.zero('BRL').isZero()).toBe(true);
     expect(Money.zero('BRL').isPositive()).toBe(false);
@@ -163,49 +163,49 @@ describe('consultas', () => {
     expect(brl('80.00').isLessThan(brl('80.00'))).toBe(false);
   });
 
-  test('equals compara valor e moeda, ignorando a forma de entrada', () => {
+  test('equals compares value and currency, ignoring the input format', () => {
     expect(brl('25').equals(brl('25.00'))).toBe(true);
     expect(brl('25.00').equals(brl('25.01'))).toBe(false);
     expect(brl('25.00').equals(usd('25.00'))).toBe(false);
   });
 });
 
-describe('conflito de moeda', () => {
+describe('currency conflict', () => {
   test.each([
     ['add', (a: Money, b: Money) => a.add(b)],
     ['subtract', (a: Money, b: Money) => a.subtract(b)],
     ['isLessThan', (a: Money, b: Money) => a.isLessThan(b)],
-  ])('%s entre moedas diferentes lança CURRENCY_MISMATCH', (_, operation) => {
+  ])('%s between different currencies throws CURRENCY_MISMATCH', (_, operation) => {
     expect(domainErrorCode(() => operation(brl('1.00'), usd('1.00')))).toBe(
       'CURRENCY_MISMATCH',
     );
   });
 
-  test('o erro é um CurrencyMismatchError', () => {
+  test('the error is a CurrencyMismatchError', () => {
     expect(() => brl('1.00').add(usd('1.00'))).toThrow(CurrencyMismatchError);
   });
 
-  test('equals entre moedas diferentes não lança, só devolve false', () => {
+  test('equals between different currencies does not throw, it just returns false', () => {
     expect(() => brl('1.00').equals(usd('1.00'))).not.toThrow();
   });
 });
 
-describe('serialização', () => {
-  test('toJSON devolve MoneyProps com escala fixa', () => {
+describe('serialization', () => {
+  test('toJSON returns MoneyProps with fixed scale', () => {
     expect(brl('25.5').toJSON()).toEqual({ amount: '25.50', currency: 'BRL' });
   });
 
-  test('JSON.stringify produz o formato do contrato', () => {
+  test('JSON.stringify produces the contract format', () => {
     expect(JSON.stringify({ money: brl('25') })).toBe(
       '{"money":{"amount":"25.00","currency":"BRL"}}',
     );
   });
 
-  test('toString é legível para logs', () => {
+  test('toString is readable for logs', () => {
     expect(brl('25').toString()).toBe('25.00 BRL');
   });
 
-  test('ida e volta pelo contrato preserva o valor', () => {
+  test('round-tripping through the contract preserves the value', () => {
     const original = brl('1234.56');
     expect(Money.from(original.toJSON()).equals(original)).toBe(true);
   });

@@ -2,14 +2,14 @@ import { type AppProcess, startAppProcess } from './app-process';
 import type { RequestFn } from './wagering-client';
 
 /**
- * Um conjunto de instâncias da aplicação que pode ser derrubado e reerguido no meio de uma carga,
- * com um cliente HTTP que se comporta como um provedor real: se a instância cair no meio da
- * requisição (ou responder 5xx), reenvia A MESMA requisição para outra instância.
+ * A set of application instances that can be killed and brought back up mid-load,
+ * with an HTTP client that behaves like a real provider: if the instance dies mid-
+ * request (or responds 5xx), it resends THE SAME request to another instance.
  */
 export class Cluster {
   private instances: AppProcess[] = [];
   private next = 0;
-  /** quantas vezes o cliente precisou reenviar uma requisição */
+  /** how many times the client had to resend a request */
   retries = 0;
 
   constructor(
@@ -30,14 +30,14 @@ export class Cluster {
     this.instances.push(...started);
   }
 
-  /** SIGKILL: morte abrupta, nenhum shutdown hook roda. */
+  /** SIGKILL: abrupt death, no shutdown hook runs. */
   async kill(index: number): Promise<AppProcess> {
     const [victim] = this.instances.splice(index, 1);
     await victim!.kill();
     return victim!;
   }
 
-  /** SIGTERM: shutdown ordenado (termina o trabalho em andamento). */
+  /** SIGTERM: ordered shutdown (finishes work in progress). */
   async terminate(index: number): Promise<AppProcess> {
     const [victim] = this.instances.splice(index, 1);
     await victim!.stop();
@@ -54,7 +54,7 @@ export class Cluster {
     await Promise.all(all.map((p) => p.stop()));
   }
 
-  /** Cliente com failover: reenvia a mesma requisição até receber uma resposta definitiva. */
+  /** Client with failover: resends the same request until it gets a definitive response. */
   readonly request: RequestFn = async (path, init) => {
     const deadline = Date.now() + 60_000;
     for (let attempt = 1; ; attempt++) {
@@ -65,7 +65,7 @@ export class Cluster {
           if (response.status < 500) return response;
           await response.body?.cancel();
         } catch {
-          // conexão recusada ou derrubada no meio: a instância morreu
+          // connection refused or dropped mid-request: the instance died
         }
       }
       if (Date.now() > deadline)

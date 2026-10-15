@@ -8,7 +8,7 @@ let t: TestApp;
 beforeAll(async () => { t = await startTestApp(); });
 afterAll(async () => { await t?.close(); });
 
-/** Roda `bun scripts/reconcile.ts` contra o banco do teste, como um operador faria. */
+/** Runs `bun scripts/reconcile.ts` against the test database, as an operator would. */
 async function runCommand(): Promise<{ exitCode: number; lines: Array<Record<string, any>> }> {
   const child = Bun.spawn([process.execPath, 'scripts/reconcile.ts'], {
     env: { ...process.env, DATABASE_URL: t.db.appUrl, MIKRO_ORM_DEBUG: 'false' },
@@ -21,7 +21,7 @@ async function runCommand(): Promise<{ exitCode: number; lines: Array<Record<str
 }
 
 describe('bun run reconcile', () => {
-  test('tudo consistente: exit 0 e só a linha de resumo', async () => {
+  test('everything consistent: exit 0 and only the summary line', async () => {
     const api = walletClient(t.request);
     const { wallet } = await api.openWallet('50.00');
     await api.submit(wallet, { kind: 'BET', amount: '10.00' });
@@ -33,7 +33,7 @@ describe('bun run reconcile', () => {
     expect(lines[0]!.checked).toBeGreaterThan(0);
   });
 
-  test('com divergência: exit 1, uma linha por wallet divergente, e nada é corrigido', async () => {
+  test('with divergence: exit 1, one line per divergent wallet, and nothing is corrected', async () => {
     const { wallet } = await walletClient(t.request).openWallet('80.00');
     await queryOnce(t.db.ownerUrl, `ALTER TABLE wallets DISABLE TRIGGER USER`);
     await queryOnce(t.db.ownerUrl, `UPDATE wallets SET balance = 81 WHERE id = $1`, [wallet.walletId]);

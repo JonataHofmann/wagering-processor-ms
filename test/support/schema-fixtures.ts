@@ -16,7 +16,7 @@ export interface TxRef {
   externalId: string;
 }
 
-/** Qualquer coisa com `.query`: um Pool ou um cliente dentro de transação. */
+/** Anything with `.query`: a Pool or a client inside a transaction. */
 interface Queryable {
   query(text: string, values?: unknown[]): Promise<unknown>;
 }
@@ -24,9 +24,9 @@ interface Queryable {
 type ColumnValue = string | number | Date | null;
 
 /**
- * Insere uma linha em wager_transactions com valores padrão válidos.
- * `overrides` usa os nomes das colunas (snake_case) e substitui qualquer padrão.
- * Padrão: LOSS de 1.00 BRL em PENDING, do provider-a.
+ * Inserts a row into wager_transactions with valid default values.
+ * `overrides` uses the column names (snake_case) and replaces any default.
+ * Default: a LOSS of 1.00 BRL in PENDING, from provider-a.
  */
 export async function insertTransaction(
   db: Queryable,
@@ -63,7 +63,7 @@ export async function insertTransaction(
   return { txId: id, externalId: String(row.external_transaction_id) };
 }
 
-/** Abre uma wallet do jeito certo: com saldo > 0, gera OPENING + lançamento CREDIT v1. */
+/** Opens a wallet the right way: with balance > 0, generates OPENING + a v1 CREDIT entry. */
 export async function openWallet(
   pool: Pool,
   balance: string,
@@ -79,7 +79,7 @@ export async function openWallet(
       [wallet.walletId, wallet.playerId, balance],
     );
 
-    if (balance === '0.00') return; // sem saldo inicial, sem OPENING
+    if (balance === '0.00') return; // no initial balance, no OPENING
 
     const opening = await insertTransaction(c, wallet, {
       provider_id: 'system',
@@ -108,15 +108,15 @@ export async function openWallet(
 export interface MovementOptions {
   kind: Exclude<Kind, 'OPENING'>;
   amount: string;
-  /** padrão: DEBIT para BET, CREDIT para o resto. Informe explicitamente para ROLLBACK. */
+  /** default: DEBIT for BET, CREDIT for the rest. Specify explicitly for ROLLBACK. */
   direction?: Direction;
   ref?: TxRef;
 }
 
 /**
- * Aplica um movimento completo, como o caso de uso fará:
- * atualiza a wallet, grava a transação PROCESSED e o lançamento, numa só transação.
- * Não valida regra de negócio: serve justamente para provar que o BANCO recusa o que for inválido.
+ * Applies a complete movement, the way the use case will:
+ * updates the wallet, writes the PROCESSED transaction and the ledger entry, in a single transaction.
+ * Does not validate business rules: its whole purpose is to prove that the DATABASE itself rejects what's invalid.
  */
 export async function applyMovement(
   pool: Pool,
@@ -172,7 +172,7 @@ export async function applyMovement(
   });
 }
 
-/** Lê saldo e versão atuais de uma wallet. */
+/** Reads the current balance and version of a wallet. */
 export async function readWallet(
   pool: Pool,
   walletId: string,

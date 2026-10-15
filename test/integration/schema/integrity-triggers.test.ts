@@ -28,8 +28,8 @@ afterAll(async () => {
   await db.drop();
 });
 
-describe('caminho correto é aceito', () => {
-  test('abrir, apostar e fazer rollback da aposta', async () => {
+describe('correct path is accepted', () => {
+  test('open, bet, and roll back the bet', async () => {
     const w = await openWallet(app, '100.00');
     const bet = await applyMovement(app, w, { kind: 'BET', amount: '30.00' });
     expect(await readWallet(app, w.walletId)).toEqual({
@@ -49,7 +49,7 @@ describe('caminho correto é aceito', () => {
     });
   });
 
-  test('LOSS processado sem lançamento é aceito', async () => {
+  test('processed LOSS without a ledger entry is accepted', async () => {
     const w = await openWallet(app, '100.00');
     await insertTransaction(app, w, {
       kind: 'LOSS',
@@ -65,7 +65,7 @@ describe('caminho correto é aceito', () => {
 });
 
 describe('ledger append-only (WL001)', () => {
-  test('nem o owner altera, apaga ou trunca o ledger', async () => {
+  test('not even the owner can alter, delete, or truncate the ledger', async () => {
     await openWallet(app, '100.00');
     expect(
       await sqlState(
@@ -81,8 +81,8 @@ describe('ledger append-only (WL001)', () => {
   });
 });
 
-describe('saldo ⇔ ledger ⇔ transação (WL002, no COMMIT)', () => {
-  test('wallet aberta com saldo exige lançamento OPENING', async () => {
+describe('balance ⇔ ledger ⇔ transaction (WL002, on COMMIT)', () => {
+  test('wallet opened with a balance requires an OPENING ledger entry', async () => {
     const code = await sqlState(
       inTx(app, (c) =>
         c.query(
@@ -94,7 +94,7 @@ describe('saldo ⇔ ledger ⇔ transação (WL002, no COMMIT)', () => {
     expect(code).toBe('WL002');
   });
 
-  test('saldo não muda sem lançamento correspondente', async () => {
+  test('balance does not change without a corresponding ledger entry', async () => {
     const w = await openWallet(app, '100.00');
     const code = await sqlState(
       inTx(app, (c) =>
@@ -107,7 +107,7 @@ describe('saldo ⇔ ledger ⇔ transação (WL002, no COMMIT)', () => {
     expect(code).toBe('WL002');
   });
 
-  test('versão não sobe sem mudança de saldo', async () => {
+  test('version does not increase without a balance change', async () => {
     const w = await openWallet(app, '100.00');
     const code = await sqlState(
       inTx(app, (c) =>
@@ -119,7 +119,7 @@ describe('saldo ⇔ ledger ⇔ transação (WL002, no COMMIT)', () => {
     expect(code).toBe('WL002');
   });
 
-  test('ROLLBACK de BET precisa creditar, não debitar', async () => {
+  test('ROLLBACK of a BET must credit, not debit', async () => {
     const w = await openWallet(app, '100.00');
     const bet = await applyMovement(app, w, { kind: 'BET', amount: '10.00' });
     const code = await sqlState(
@@ -133,14 +133,14 @@ describe('saldo ⇔ ledger ⇔ transação (WL002, no COMMIT)', () => {
     expect(code).toBe('WL002');
   });
 
-  test('LOSS não pode gerar lançamento', async () => {
+  test('LOSS cannot generate a ledger entry', async () => {
     const w = await openWallet(app, '100.00');
     expect(
       await sqlState(applyMovement(app, w, { kind: 'LOSS', amount: '5.00' })),
     ).toBe('WL002');
   });
 
-  test('uma operação recusada no COMMIT não deixa nada gravado', async () => {
+  test('an operation rejected on COMMIT leaves nothing recorded', async () => {
     const w = await openWallet(app, '100.00');
     await sqlState(applyMovement(app, w, { kind: 'LOSS', amount: '5.00' }));
     expect(await readWallet(app, w.walletId)).toEqual({
@@ -150,8 +150,8 @@ describe('saldo ⇔ ledger ⇔ transação (WL002, no COMMIT)', () => {
   });
 });
 
-describe('ciclo de vida da transação (WL003)', () => {
-  test('estado terminal não muda', async () => {
+describe('transaction lifecycle (WL003)', () => {
+  test('terminal state does not change', async () => {
     const w = await openWallet(app, '100.00');
     const bet = await applyMovement(app, w, { kind: 'BET', amount: '10.00' });
     const code = await sqlState(
@@ -163,7 +163,7 @@ describe('ciclo de vida da transação (WL003)', () => {
     expect(code).toBe('WL003');
   });
 
-  test('colunas de identidade não mudam, nem em transação pendente', async () => {
+  test('identity columns do not change, even in a pending transaction', async () => {
     const w = await openWallet(app, '0.00');
     const tx = await insertTransaction(app, w);
     const code = await sqlState(
@@ -174,7 +174,7 @@ describe('ciclo de vida da transação (WL003)', () => {
     expect(code).toBe('WL003');
   });
 
-  test('PENDING_REFERENCE não volta para PENDING', async () => {
+  test('PENDING_REFERENCE does not revert to PENDING', async () => {
     const w = await openWallet(app, '0.00');
     const tx = await insertTransaction(app, w, {
       kind: 'REFUND',
@@ -192,7 +192,7 @@ describe('ciclo de vida da transação (WL003)', () => {
     expect(code).toBe('WL003');
   });
 
-  test('nem o owner apaga transações', async () => {
+  test('not even the owner can delete transactions', async () => {
     const w = await openWallet(app, '100.00');
     const bet = await applyMovement(app, w, { kind: 'BET', amount: '10.00' });
     expect(
@@ -203,8 +203,8 @@ describe('ciclo de vida da transação (WL003)', () => {
   });
 });
 
-describe('campos imutáveis da wallet (WL004)', () => {
-  test('moeda e jogador não mudam', async () => {
+describe('immutable wallet fields (WL004)', () => {
+  test('currency and player do not change', async () => {
     const w = await openWallet(app, '0.00');
     expect(
       await sqlState(

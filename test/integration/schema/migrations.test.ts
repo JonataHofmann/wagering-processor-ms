@@ -52,7 +52,7 @@ async function countUserObjects(): Promise<{
   };
 }
 
-test('migrations sobem, descem por completo e sobem de novo', async () => {
+test('migrations go up, go all the way down, and go up again', async () => {
   await runMigrations(db.ownerUrl, 'up');
   expect(await listTables()).toEqual([
     'inbox_messages',
@@ -64,7 +64,7 @@ test('migrations sobem, descem por completo e sobem de novo', async () => {
 
   await runMigrations(db.ownerUrl, 'down-all');
   expect(await listTables()).toEqual([]);
-  // o down remove tudo o que o up criou, não só as tabelas
+  // the down removes everything the up created, not just the tables
   expect(await countUserObjects()).toEqual({
     triggers: 0,
     functions: 0,

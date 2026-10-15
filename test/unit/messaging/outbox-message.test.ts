@@ -9,7 +9,7 @@ import { InvariantViolationError } from '@/src/shared/error/invariant-violation-
 const T0 = new Date('2026-01-01T00:00:00.000Z');
 const at = (ms: number): Date => new Date(T0.getTime() + ms);
 
-/** Evento mínimo para testar a outbox sem depender dos eventos de negócio. */
+/** Minimal event to test the outbox without depending on business events. */
 class TestEvent extends IntegrationEvent<{ value: string }> {
   readonly eventType = 'TestEvent';
   readonly version = 2;
@@ -25,7 +25,7 @@ class TestEvent extends IntegrationEvent<{ value: string }> {
   }
 }
 
-/** 1 s, 2 s, 4 s ... teto 60 s, sem aleatoriedade. */
+/** 1s, 2s, 4s ... ceiling 60s, no randomness. */
 const exact = new ExponentialBackoff({
   baseMs: 1_000,
   maxMs: 60_000,
@@ -33,7 +33,7 @@ const exact = new ExponentialBackoff({
 });
 
 describe('enqueue', () => {
-  test('copia identidade, tipo e versão do evento', () => {
+  test('copies identity, type and version of the event', () => {
     const message = OutboxMessage.enqueue(TestEvent.of());
     expect(message).toMatchObject({
       id: 'evt-1',
@@ -44,7 +44,7 @@ describe('enqueue', () => {
     expect(message.occurredAt).toEqual(T0);
   });
 
-  test('o payload é o envelope do evento, congelado', () => {
+  test('the payload is the event envelope, frozen', () => {
     const event = TestEvent.of();
     const message = OutboxMessage.enqueue(event);
     expect(message.payload).toEqual(
@@ -53,7 +53,7 @@ describe('enqueue', () => {
     expect(Object.isFrozen(message.payload)).toBe(true);
   });
 
-  test('nasce pendente, sem tentativas, e vencido no momento do evento', () => {
+  test('starts pending, with no attempts, and due at the moment of the event', () => {
     const message = OutboxMessage.enqueue(TestEvent.of());
     expect(message.isPending()).toBe(true);
     expect(message.attempts).toBe(0);
@@ -63,29 +63,29 @@ describe('enqueue', () => {
 });
 
 describe('isDue', () => {
-  test('falso antes de nextAttemptAt, verdadeiro no instante exato e depois', () => {
+  test('false before nextAttemptAt, true at the exact instant and after', () => {
     const message = OutboxMessage.enqueue(TestEvent.of());
-    message.scheduleRetry(T0, { backoff: exact }); // próxima em T0 + 1 s
+    message.scheduleRetry(T0, { backoff: exact }); // next at T0 + 1s
 
     expect(message.isDue(at(999))).toBe(false);
     expect(message.isDue(at(1_000))).toBe(true);
     expect(message.isDue(at(5_000))).toBe(true);
   });
 
-  test('evento publicado nunca está vencido', () => {
+  test('published event is never due', () => {
     const message = OutboxMessage.enqueue(TestEvent.of());
     message.markPublished(at(10));
     expect(message.isPending()).toBe(false);
     expect(message.isDue(at(999_999))).toBe(false);
   });
 
-  test('evento recém-enfileirado já está vencido', () => {
+  test('freshly enqueued event is already due', () => {
     expect(OutboxMessage.enqueue(TestEvent.of()).isDue(T0)).toBe(true);
   });
 });
 
-describe('scheduleRetry com backoff', () => {
-  test('cada falha incrementa attempts e agenda a partir do momento da falha', () => {
+describe('scheduleRetry with backoff', () => {
+  test('each failure increments attempts and schedules from the moment of failure', () => {
     const message = OutboxMessage.enqueue(TestEvent.of());
 
     message.scheduleRetry(at(0), { backoff: exact });
@@ -94,20 +94,20 @@ describe('scheduleRetry com backoff', () => {
 
     message.scheduleRetry(at(1_000), { backoff: exact });
     expect(message.attempts).toBe(2);
-    expect(message.nextAttemptAt).toEqual(at(3_000)); // 1 s + 2 s
+    expect(message.nextAttemptAt).toEqual(at(3_000)); // 1s + 2s
 
     message.scheduleRetry(at(3_000), { backoff: exact });
     expect(message.attempts).toBe(3);
-    expect(message.nextAttemptAt).toEqual(at(7_000)); // 3 s + 4 s
+    expect(message.nextAttemptAt).toEqual(at(7_000)); // 3s + 4s
   });
 
-  test('logo depois de reagendar, o evento não está vencido', () => {
+  test('right after rescheduling, the event is not due', () => {
     const message = OutboxMessage.enqueue(TestEvent.of());
     message.scheduleRetry(at(0), { backoff: exact });
     expect(message.isDue(at(0))).toBe(false);
   });
 
-  test('guarda o erro da última tentativa, truncado em 500 caracteres', () => {
+  test('stores the error of the last attempt, truncated to 500 characters', () => {
     const message = OutboxMessage.enqueue(TestEvent.of());
     message.scheduleRetry(at(0), { backoff: exact, error: 'x'.repeat(800) });
     expect(message.lastError).toHaveLength(500);
@@ -117,8 +117,8 @@ describe('scheduleRetry com backoff', () => {
   });
 });
 
-describe('teto do backoff', () => {
-  test('depois de muitas falhas, o intervalo fica preso no teto', () => {
+describe('backoff ceiling', () => {
+  test('after many failures, the interval stays stuck at the ceiling', () => {
     const message = OutboxMessage.enqueue(TestEvent.of());
     let now = T0;
     const waits: number[] = [];
@@ -135,17 +135,17 @@ describe('teto do backoff', () => {
       4_000,
       8_000,
       16_000,
-      32_000, // cresce
+      32_000, // grows
       60_000,
       60_000,
       60_000,
       60_000,
       60_000,
-      60_000, // preso no teto
+      60_000, // stuck at the ceiling
     ]);
   });
 
-  test('sem limite de tentativas: evento confirmado nunca é descartado', () => {
+  test('no limit on attempts: a confirmed event is never discarded', () => {
     const message = OutboxMessage.enqueue(TestEvent.of());
     for (let i = 0; i < 1_000; i++)
       message.scheduleRetry(at(i), { backoff: exact });
@@ -153,20 +153,20 @@ describe('teto do backoff', () => {
     expect(message.isPending()).toBe(true);
   });
 
-  test('a política padrão vai de ~1 s até 5 min', () => {
+  test('the default policy ranges from ~1s to 5min', () => {
     expect(OUTBOX_RETRY_BACKOFF.ceilingFor(1)).toBe(1_000);
     expect(OUTBOX_RETRY_BACKOFF.ceilingFor(50)).toBe(300_000);
 
     const message = OutboxMessage.enqueue(TestEvent.of());
-    message.scheduleRetry(T0); // usa a política padrão, com jitter
+    message.scheduleRetry(T0); // uses the default policy, with jitter
     const wait = message.nextAttemptAt.getTime() - T0.getTime();
     expect(wait).toBeGreaterThanOrEqual(500);
     expect(wait).toBeLessThanOrEqual(1_000);
   });
 });
 
-describe('publicação', () => {
-  test('marcar como publicado duas vezes é bug', () => {
+describe('publishing', () => {
+  test('marking as published twice is a bug', () => {
     const message = OutboxMessage.enqueue(TestEvent.of());
     message.markPublished(at(10));
     expect(() => message.markPublished(at(20))).toThrow(
@@ -175,7 +175,7 @@ describe('publicação', () => {
     expect(message.publishedAt).toEqual(at(10));
   });
 
-  test('reagendar um evento já publicado é bug', () => {
+  test('rescheduling an already published event is a bug', () => {
     const message = OutboxMessage.enqueue(TestEvent.of());
     message.markPublished(at(10));
     expect(() => message.scheduleRetry(at(20), { backoff: exact })).toThrow(
@@ -185,7 +185,7 @@ describe('publicação', () => {
 });
 
 describe('rehydrate', () => {
-  test('restaura o estado e continua a contagem de tentativas', () => {
+  test('restores state and continues counting attempts', () => {
     const message = OutboxMessage.rehydrate({
       id: 'evt-9',
       aggregateId: 'wallet-9',
@@ -201,6 +201,6 @@ describe('rehydrate', () => {
 
     message.scheduleRetry(at(30_000), { backoff: exact });
     expect(message.attempts).toBe(5);
-    expect(message.nextAttemptAt).toEqual(at(30_000 + 16_000)); // 5ª tentativa: 16 s
+    expect(message.nextAttemptAt).toEqual(at(30_000 + 16_000)); // 5th attempt: 16s
   });
 });

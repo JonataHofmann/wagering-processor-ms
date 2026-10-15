@@ -18,8 +18,8 @@ import { FixedClock } from '@/test/support/fakes';
 import { MikroORM } from '@mikro-orm/postgresql';
 
 /**
- * Cria um banco isolado e conecta a persistência nele.
- * O banco pertence a esta persistência: close() fecha o ORM e apaga o banco.
+ * Creates an isolated database and connects the persistence layer to it.
+ * The database belongs to this persistence instance: close() closes the ORM and drops the database.
  */
 export async function createPersistence(timeouts?: TransactionTimeouts) {
   const db = await createIsolatedDatabase();
@@ -27,10 +27,10 @@ export async function createPersistence(timeouts?: TransactionTimeouts) {
 }
 
 /**
- * Conecta a persistência a um banco isolado que já existe
- * (ex.: o mesmo banco usado pela aplicação num teste HTTP).
- * O banco NÃO pertence a esta persistência: close() só fecha o ORM;
- * quem criou o banco é quem o apaga.
+ * Connects the persistence layer to an isolated database that already exists
+ * (e.g. the same database used by the application in an HTTP test).
+ * The database does NOT belong to this persistence instance: close() only closes the ORM;
+ * whoever created the database is responsible for dropping it.
  */
 export async function connectPersistence(
   db: IsolatedDatabase,
@@ -39,7 +39,7 @@ export async function connectPersistence(
   return buildPersistence(db, { ownsDatabase: false, timeouts });
 }
 
-/** Banco isolado + MikroORM conectado como wagering_app + todos os repositórios reais. */
+/** Isolated database + MikroORM connected as wagering_app + all the real repositories. */
 async function buildPersistence(
   db: IsolatedDatabase,
   options: { ownsDatabase: boolean; timeouts?: TransactionTimeouts },

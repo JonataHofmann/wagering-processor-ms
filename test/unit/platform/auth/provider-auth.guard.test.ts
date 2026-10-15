@@ -28,7 +28,7 @@ const IDENTITY: ProviderIdentity = {
 };
 
 describe('ProviderAuthGuard', () => {
-  test('delega ao Port o token extraído do header Authorization: Bearer', async () => {
+  test('delegates to the Port the token extracted from the Authorization: Bearer header', async () => {
     let receivedToken: string | undefined;
     const port: ProviderIdentityPort = {
       authenticate: async (token) => {
@@ -45,7 +45,7 @@ describe('ProviderAuthGuard', () => {
     expect(receivedToken).toBe('abc123');
   });
 
-  test('disponibiliza a identidade autenticada no contexto da requisição', async () => {
+  test('makes the authenticated identity available in the request context', async () => {
     const port: ProviderIdentityPort = { authenticate: async () => IDENTITY };
     const guard = new ProviderAuthGuard(port);
     const request: FakeRequest = { headers: {} };
@@ -55,8 +55,8 @@ describe('ProviderAuthGuard', () => {
     expect(request.providerIdentity).toEqual(IDENTITY);
   });
 
-  test('sem header Authorization, chama o Port com token undefined', async () => {
-    let receivedToken: string | undefined = 'nunca-deveria-ficar-assim';
+  test('without an Authorization header, calls the Port with token undefined', async () => {
+    let receivedToken: string | undefined = 'should-never-stay-like-this';
     const port: ProviderIdentityPort = {
       authenticate: async (token) => {
         receivedToken = token;
@@ -70,7 +70,7 @@ describe('ProviderAuthGuard', () => {
     expect(receivedToken).toBeUndefined();
   });
 
-  test('rejeita com UnauthorizedException quando o Port lança', async () => {
+  test('rejects with UnauthorizedException when the Port throws', async () => {
     const port: ProviderIdentityPort = {
       authenticate: async () => {
         throw new Error('invalid token');

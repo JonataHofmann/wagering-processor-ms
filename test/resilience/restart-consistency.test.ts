@@ -21,12 +21,13 @@ import {
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 
 /**
- * Carga mista contínua (HTTP e fila, em ordem e fora de ordem, com mensagens duplicadas)
- * sobre 3 instâncias (toda instância faz tudo), enquanto instâncias são derrubadas e reerguidas:
- *   - uma morta com SIGKILL e substituída;
- *   - uma encerrada com SIGTERM e substituída;
- *   - o serviço INTEIRO morto com SIGKILL e reiniciado.
- * No fim, a prova completa de consistência.
+ * Continuous mixed load (HTTP and queue, in order and out of order, with duplicate messages)
+ * across 3 instances (every instance does everything), while instances are killed and brought
+ * back up:
+ *   - one killed with SIGKILL and replaced;
+ *   - one shut down with SIGTERM and replaced;
+ *   - the WHOLE service killed with SIGKILL and restarted.
+ * At the end, the full consistency proof.
  */
 
 const WALLETS = 12;
@@ -39,8 +40,8 @@ let cluster: Cluster;
 
 beforeAll(async () => {
   db = await createIsolatedDatabase();
-  // visibility timeout curto: mensagens presas numa instância morta voltam logo;
-  // maxReceiveCount alto: as mortes do teste não podem mandar mensagens legítimas para a DLQ
+  // short visibility timeout: messages stuck on a dead instance come back quickly;
+  // high maxReceiveCount: the test's kills must not send legitimate messages to the DLQ
   queues = await createTestQueues({
     visibilityTimeoutSeconds: 3,
     maxReceiveCount: 10,
@@ -64,9 +65,9 @@ afterAll(async () => {
 
 interface Planned {
   wallet: TestWallet;
-  /** operações HTTP, enviadas em ordem (a primeira é um REFUND antes da sua BET) */
+  /** HTTP operations, sent in order (the first is a REFUND before its BET) */
   http: Operation[];
-  /** mensagens da fila (enviadas em ordem; o ROLLBACK antes do seu WIN; BETs duplicadas) */
+  /** queue messages (sent in order; the ROLLBACK before its WIN; duplicated BETs) */
   messages: Array<{ body: Record<string, unknown>; copies: number }>;
   expectedBalance: string;
   expectedEntries: number;
@@ -93,10 +94,10 @@ function sqsMessage(w: TestWallet, data: Record<string, unknown>) {
 }
 
 /**
- * Plano determinístico por wallet. Nenhuma operação pode ser rejeitada (saldo sempre sobra),
- * então o saldo final é conhecido de antemão, qualquer que seja a ordem de chegada:
- *   1000 - 5×10 (BETs) + 2×7 (WINs) + 10 (REFUND da BET 1) - 3×5 (BETs pela fila) + 20 - 20 (WIN e ROLLBACK)
- *   = 959.00, com 14 lançamentos (abertura + 13 movimentos; LOSS não gera lançamento)
+ * Deterministic plan per wallet. No operation can be rejected (balance always has headroom),
+ * so the final balance is known up front, regardless of arrival order:
+ *   1000 - 5×10 (BETs) + 2×7 (WINs) + 10 (REFUND of BET 1) - 3×5 (BETs via queue) + 20 - 20 (WIN and ROLLBACK)
+ *   = 959.00, with 14 entries (opening + 13 movements; LOSS doesn't generate an entry)
  */
 function plan(wallet: TestWallet): Planned {
   const bet1 = crypto.randomUUID();
@@ -106,7 +107,7 @@ function plan(wallet: TestWallet): Planned {
   return {
     wallet,
     http: [
-      { kind: 'REFUND', amount: '10.00', reference: bet1 }, // antes da BET: fica pendente
+      { kind: 'REFUND', amount: '10.00', reference: bet1 }, // before the BET: stays pending
       { kind: 'BET', amount: '10.00', externalId: bet1 },
       { kind: 'BET', amount: '10.00' },
       { kind: 'WIN', amount: '7.00' },
@@ -128,7 +129,7 @@ function plan(wallet: TestWallet): Planned {
       {
         body: sqsMessage(wallet, { kind: 'BET', money: money('5.00') }),
         copies: 2,
-      }, // entregue duas vezes
+      }, // delivered twice
       {
         body: sqsMessage(wallet, {
           kind: 'WIN',
@@ -160,14 +161,14 @@ async function runWallet(
     const op = p.http[i];
     if (op !== undefined) {
       const result = await api.submit(p.wallet, op);
-      // nenhuma operação do plano pode ser rejeitada; 200 ou 202 (pendente)
+      // no operation in the plan can be rejected; 200 or 202 (pending)
       expect([200, 202]).toContain(result.status);
       keys.push(`provider-a:${result.externalId}`);
     }
     const message = p.messages[i];
     if (message !== undefined) {
       for (let copy = 0; copy < message.copies; copy++) {
-        await queues.send(message.body, { groupId: p.wallet.walletId }); // dedup id novo: o SQS entrega as cópias
+        await queues.send(message.body, { groupId: p.wallet.walletId }); // new dedup id: SQS delivers the copies
       }
       keys.push(
         (message.body.data as { idempotencyKey: string }).idempotencyKey,
@@ -185,7 +186,7 @@ async function count(sql: string, params: unknown[] = []): Promise<number> {
 
 // ------------------------------------------------------------------ o teste
 
-test('reinício do serviço no meio da carga: consistência final completa', async () => {
+test('service restart in the middle of the load: full final consistency', async () => {
   const api = walletClient(cluster.request);
   const wallets = await Promise.all(
     Array.from(
@@ -200,10 +201,10 @@ test('reinício do serviço no meio da carga: consistência final completa', asy
     ),
   );
 
-  // sonda contínua e barata (/health/live, sem tocar o banco) só para garantir que
-  // SEMPRE haja uma requisição em voo no instante exato de cada kill — sem isso,
-  // cluster.retries depende de o tráfego de negócio coincidir por acaso com a
-  // janela de poucos ms do SIGKILL/SIGTERM, o que é visivelmente instável.
+  // continuous, cheap probe (/health/live, doesn't touch the database) just to guarantee that
+  // there's ALWAYS a request in flight at the exact instant of each kill — without this,
+  // cluster.retries depends on business traffic coincidentally lining up with the
+  // few-ms window of the SIGKILL/SIGTERM, which is visibly flaky.
   let probing = true;
   const probe = (async () => {
     while (probing) {
@@ -211,24 +212,24 @@ test('reinício do serviço no meio da carga: consistência final completa', asy
         const response = await cluster.request('/health/live');
         await response.text();
       } catch {
-        // instância morta durante a sonda: cluster.request já reencaminha
+        // instance dead during the probe: cluster.request already reroutes
       }
       await Bun.sleep(10);
     }
   })();
 
-  // caos em paralelo com a carga
+  // chaos running in parallel with the load
   const chaos = (async () => {
     await Bun.sleep(600);
-    await cluster.kill(0); // 1. uma instância morre de repente (SIGKILL)
-    await cluster.start(1); //    e é substituída
+    await cluster.kill(0); // 1. one instance suddenly dies (SIGKILL)
+    await cluster.start(1); //    and is replaced
     await Bun.sleep(400);
-    await cluster.terminate(0); // 2. outra é encerrada com SIGTERM (deploy)
+    await cluster.terminate(0); // 2. another is shut down with SIGTERM (deploy)
     await cluster.start(1);
     await Bun.sleep(400);
-    await cluster.killAll(); // 3. o serviço inteiro cai (SIGKILL em todas)
+    await cluster.killAll(); // 3. the whole service goes down (SIGKILL on all)
     await Bun.sleep(300);
-    await cluster.start(3); //    e é reiniciado do zero
+    await cluster.start(3); //    and is restarted from scratch
   })();
 
   const keysPerWallet = await Promise.all(plans.map((p) => runWallet(p, api)));
@@ -237,7 +238,7 @@ test('reinício do serviço no meio da carga: consistência final completa', asy
   await probe;
   const allKeys = keysPerWallet.flat();
 
-  // ---------- convergência: o sistema termina sozinho tudo o que aceitou ----------
+  // ---------- convergence: the system finishes on its own everything it accepted ----------
   await waitFor(
     async () =>
       (await count(
@@ -262,8 +263,8 @@ test('reinício do serviço no meio da carga: consistência final completa', asy
   );
   await cluster.stopAll();
 
-  // ---------- a prova ----------
-  // 1. nenhum efeito perdido nem duplicado: o saldo final de cada wallet é exatamente o planejado
+  // ---------- the proof ----------
+  // 1. no effect lost or duplicated: each wallet's final balance is exactly as planned
   for (const p of plans) {
     const [row] = await queryOnce<{ balance: string; version: number }>(
       db.appUrl,
@@ -277,7 +278,7 @@ test('reinício do serviço no meio da carga: consistência final completa', asy
     });
   }
 
-  // 2. uma transação por operação, todas terminais, nenhuma pendência esquecida
+  // 2. one transaction per operation, all terminal, no forgotten pending item
   expect(
     await count(
       `SELECT count(*) AS n FROM wager_transactions WHERE idempotency_key = ANY($1)`,
@@ -290,19 +291,19 @@ test('reinício do serviço no meio da carga: consistência final completa', asy
     ),
   ).toBe(0);
 
-  // 3. ledger: exatamente um lançamento por movimento, e o saldo bate com o ledger em todas as wallets
+  // 3. ledger: exactly one entry per movement, and the balance matches the ledger on every wallet
   expect(await count(`SELECT count(*) AS n FROM wallet_ledger_entries`)).toBe(
     plans.reduce((s, p) => s + p.expectedEntries, 0),
   );
   expect(await walletsInconsistentWithLedger(db.appUrl)).toEqual([]);
 
-  // 4. fila: cada mensagem registrada uma única vez na inbox, nada na DLQ, nada esquecido na fila
+  // 4. queue: each message recorded exactly once in the inbox, nothing in the DLQ, nothing left behind in the queue
   expect(await count(`SELECT count(*) AS n FROM inbox_messages`)).toBe(
     sentMessageIds.size,
   );
   expect(await queues.deadLetters()).toHaveLength(0);
 
-  // 5. eventos: toda a outbox publicada, e todo evento chegou ao broker (duplicatas, se houver, com o mesmo eventId)
+  // 5. events: the whole outbox published, and every event reached the broker (duplicates, if any, with the same eventId)
   const outboxIds = new Set(
     (
       await queryOnce<{ id: string }>(
@@ -314,7 +315,7 @@ test('reinício do serviço no meio da carga: consistência final completa', asy
   const published = await queues.drainEvents();
   expect(new Set(published.map((e) => e.body.eventId))).toEqual(outboxIds);
 
-  // 6. a reconciliação oficial (etapa 17) concorda: exit 0, nenhuma divergência
+  // 6. the official reconciliation (step 17) agrees: exit 0, no divergence
   const reconcile = Bun.spawn([process.execPath, 'scripts/reconcile.ts'], {
     env: { ...process.env, DATABASE_URL: db.appUrl, MIKRO_ORM_DEBUG: 'false' },
     stdout: 'pipe',
@@ -330,8 +331,8 @@ test('reinício do serviço no meio da carga: consistência final completa', asy
     divergent: 0,
   });
 
-  // o caos realmente aconteceu: o cliente precisou reenviar requisições (garantido
-  // pela sonda contínua acima, não só pela coincidência com a carga de negócio)
+  // the chaos really happened: the client had to resend requests (guaranteed by
+  // the continuous probe above, not just by coincidence with business load)
   console.log(
     `client retries during chaos: ${cluster.retries}; events published: ${published.length} for ${outboxIds.size} outbox rows`,
   );

@@ -16,7 +16,7 @@ function contextWith(providerIdentity?: ProviderIdentity): ExecutionContext {
 }
 
 describe('extractCurrentProvider (CurrentProvider decorator)', () => {
-  test('devolve a identidade colocada no request pelo ProviderAuthGuard', () => {
+  test('returns the identity placed on the request by ProviderAuthGuard', () => {
     const identity: ProviderIdentity = {
       subject: 'sub-1',
       providerId: 'provider-1',
@@ -26,7 +26,7 @@ describe('extractCurrentProvider (CurrentProvider decorator)', () => {
     expect(extractCurrentProvider(contextWith(identity))).toEqual(identity);
   });
 
-  test('lança se usado sem ProviderAuthGuard (request sem identidade)', () => {
+  test('throws if used without ProviderAuthGuard (request without identity)', () => {
     expect(() => extractCurrentProvider(contextWith(undefined))).toThrow(
       /used without ProviderAuthGuard/,
     );

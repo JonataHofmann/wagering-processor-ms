@@ -33,7 +33,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   publisher = new RecordingPublisher();
-  // cada teste começa sem eventos pendentes de testes anteriores
+  // each test starts with no pending events left over from previous tests
   await queryOnce(
     p.db.appUrl,
     `UPDATE outbox_messages SET published_at = now() WHERE published_at IS NULL`,
@@ -54,7 +54,7 @@ class TestEvent extends IntegrationEvent<{ sequence: number }> {
   }
 }
 
-/** Grava n eventos na outbox, com occurredAt crescente a partir do relógio do teste. */
+/** Writes n events to the outbox, with increasing occurredAt starting from the test clock. */
 async function enqueue(n: number): Promise<OutboxMessage[]> {
   const base = p.clock.now().getTime();
   const messages = Array.from({ length: n }, (_, i) =>
@@ -96,8 +96,8 @@ async function row(id: string) {
   return r!;
 }
 
-describe('publicação', () => {
-  test('publica os pendentes em ordem de ocorrência e marca como publicados', async () => {
+describe('publishing', () => {
+  test('publishes pending messages in occurrence order and marks them as published', async () => {
     const messages = await enqueue(5);
     const round = await relay().relayOnce();
 
@@ -108,11 +108,11 @@ describe('publicação', () => {
     for (const m of messages) {
       const r = await row(m.id);
       expect(r.published_at).not.toBeNull();
-      expect(r.locked_by).toBeNull(); // lease solto
+      expect(r.locked_by).toBeNull(); // lease released
     }
   });
 
-  test('publicado não é publicado de novo', async () => {
+  test('a published message is not published again', async () => {
     await enqueue(3);
     await relay().relayOnce();
     expect(await relay().relayOnce()).toEqual({
@@ -123,7 +123,7 @@ describe('publicação', () => {
     expect(publisher.published).toHaveLength(3);
   });
 
-  test('o payload publicado é o envelope gravado na transação', async () => {
+  test('the published payload is the envelope stored in the transaction', async () => {
     const [m] = await enqueue(1);
     await relay().relayOnce();
     expect(publisher.published[0]!.payload).toEqual(
@@ -131,26 +131,26 @@ describe('publicação', () => {
     );
   });
 
-  test('registra outbox_publish_lag_seconds (gauge) depois de publicar', async () => {
+  test('records outbox_publish_lag_seconds (gauge) after publishing', async () => {
     const metrics = new InMemoryMetrics();
-    await enqueue(3); // occurredAt no passado: lag > 0 ao publicar agora
+    await enqueue(3); // occurredAt in the past: lag > 0 when publishing now
     await relay({ metrics }).relayOnce();
 
     expect(metrics.value('outbox_publish_lag_seconds')).toBeGreaterThan(0);
   });
 });
 
-describe('relays concorrentes', () => {
-  test('4 relays disputando 200 eventos: cada evento publicado exatamente uma vez', async () => {
+describe('concurrent relays', () => {
+  test('4 relays contending for 200 events: each event published exactly once', async () => {
     const messages = await enqueue(200);
-    publisher.delayMs = 5; // alarga a janela entre reservar e marcar
+    publisher.delayMs = 5; // widens the window between claiming and marking
     const relays = Array.from({ length: 4 }, () => relay());
 
-    // cada relay roda rodadas até não sobrar nada
+    // each relay runs rounds until nothing is left
     await Promise.all(
       relays.map(async (r) => {
         while ((await r.relayOnce()).claimed > 0) {
-          /* continua */
+          /* continue */
         }
       }),
     );
@@ -160,7 +160,7 @@ describe('relays concorrentes', () => {
     for (const m of messages) expect(publisher.countOf(m.id)).toBe(1);
   });
 
-  test('o lote reservado por um relay é invisível para os outros enquanto o lease vale', async () => {
+  test('the batch claimed by one relay is invisible to others while the lease holds', async () => {
     await enqueue(3);
     const claimed = await p.tm.runInTransaction(() =>
       p.outbox.claimDue({
@@ -180,10 +180,10 @@ describe('relays concorrentes', () => {
   });
 });
 
-describe('falhas', () => {
-  test('relay morto depois de reservar: com o lease vencido, outro relay assume', async () => {
+describe('failures', () => {
+  test('relay dies after claiming: once the lease expires, another relay takes over', async () => {
     const [m] = await enqueue(1);
-    // reserva e "morre": nunca publica nem marca
+    // claims and "dies": never publishes nor marks
     await p.tm.runInTransaction(() =>
       p.outbox.claimDue({
         now: p.clock.now(),
@@ -193,7 +193,7 @@ describe('falhas', () => {
       }),
     );
 
-    expect((await relay().relayOnce()).claimed).toBe(0); // lease ainda vale
+    expect((await relay().relayOnce()).claimed).toBe(0); // lease still holds
 
     p.clock.advance(30_001);
     expect(await relay().relayOnce()).toEqual({
@@ -204,7 +204,7 @@ describe('falhas', () => {
     expect(publisher.countOf(m!.id)).toBe(1);
   });
 
-  test('morto depois de publicar e antes de marcar: o evento é publicado de novo (at-least-once), com o mesmo eventId', async () => {
+  test('dies after publishing and before marking: the event is published again (at-least-once), with the same eventId', async () => {
     const [m] = await enqueue(1);
     const crashing = relay({
       afterPublish: () => {
@@ -216,18 +216,18 @@ describe('falhas', () => {
       'process died after publish',
     );
     expect(publisher.countOf(m!.id)).toBe(1);
-    expect((await row(m!.id)).published_at).toBeNull(); // publicado no broker, mas não marcado
+    expect((await row(m!.id)).published_at).toBeNull(); // published on the broker, but not marked
 
-    p.clock.advance(30_001); // lease do relay morto vence
+    p.clock.advance(30_001); // dead relay's lease expires
     await relay().relayOnce();
 
-    expect(publisher.countOf(m!.id)).toBe(2); // duplicata: o consumidor deduplica pelo eventId
+    expect(publisher.countOf(m!.id)).toBe(2); // duplicate: the consumer deduplicates by eventId
     const [first, second] = publisher.published.filter((e) => e.id === m!.id);
     expect(second!.payload).toEqual(first!.payload as Record<string, unknown>);
     expect((await row(m!.id)).published_at).not.toBeNull();
   });
 
-  test('falha de publicação: attempts, backoff e erro registrados; republica quando vencer', async () => {
+  test('publish failure: attempts, backoff and error recorded; republishes once due', async () => {
     const [m] = await enqueue(1);
     publisher.failNext.add(m!.id);
 
@@ -244,7 +244,7 @@ describe('falhas', () => {
       p.clock.now().getTime() + 1_000,
     );
 
-    expect((await relay().relayOnce()).claimed).toBe(0); // ainda não venceu
+    expect((await relay().relayOnce()).claimed).toBe(0); // not yet due
     p.clock.advance(1_000);
     expect(await relay().relayOnce()).toEqual({
       claimed: 1,
@@ -253,7 +253,7 @@ describe('falhas', () => {
     });
   });
 
-  test('falha parcial no lote: só os que falharam ficam pendentes', async () => {
+  test('partial batch failure: only the ones that failed remain pending', async () => {
     const messages = await enqueue(4);
     publisher.failNext.add(messages[1]!.id);
     publisher.failNext.add(messages[3]!.id);
@@ -267,7 +267,7 @@ describe('falhas', () => {
     expect((await row(messages[1]!.id)).published_at).toBeNull();
   });
 
-  test('broker fora do ar: o lote inteiro entra no backoff, com intervalos crescentes', async () => {
+  test('broker down: the entire batch enters backoff, with increasing intervals', async () => {
     const [m] = await enqueue(1);
     publisher.outage = 'connection refused';
 
@@ -281,7 +281,7 @@ describe('falhas', () => {
     }
     expect((await row(m!.id)).attempts).toBe(3);
 
-    publisher.outage = undefined; // broker volta
+    publisher.outage = undefined; // broker comes back
     expect(await relay().relayOnce()).toEqual({
       claimed: 1,
       published: 1,

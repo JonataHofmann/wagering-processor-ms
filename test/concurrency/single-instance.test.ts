@@ -14,7 +14,7 @@ import {
 } from '@/test/support/wagering-client';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
-/** Quantas vezes cada corrida é repetida. Aumente localmente: CONCURRENCY_ITERATIONS=100 */
+/** How many times each race is repeated. Increase locally: CONCURRENCY_ITERATIONS=100 */
 const ITERATIONS = Number(process.env.CONCURRENCY_ITERATIONS ?? 10);
 
 let t: TestApp;
@@ -28,7 +28,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // invariante final: nenhuma wallet do banco diverge do próprio ledger
+  // final invariant: no wallet in the database diverges from its own ledger
   if (t) expect(await walletsInconsistentWithLedger(t.db.appUrl)).toEqual([]);
   await p?.close();
   await t?.close();
@@ -38,7 +38,7 @@ async function newWallet(balance: string): Promise<TestWallet> {
   return (await api.openWallet(balance)).wallet;
 }
 
-/** Dispara todas as operações ao mesmo tempo. */
+/** Fires all operations at the same time. */
 function race(w: TestWallet, operations: Operation[]): Promise<SubmitResult[]> {
   return Promise.all(operations.map((op) => api.submit(w, op)));
 }
@@ -60,10 +60,10 @@ async function countEntries(
   return Number(row!.n);
 }
 
-// ===================================================================== mesma wallet
+// ===================================================================== same wallet
 
-describe('disputa pelo saldo da mesma wallet', () => {
-  test(`cenário do enunciado (100.00, duas apostas de 80.00), repetido ${ITERATIONS} vezes`, async () => {
+describe('dispute over the balance of the same wallet', () => {
+  test(`prompt scenario (100.00, two bets of 80.00), repeated ${ITERATIONS} times`, async () => {
     for (let i = 0; i < ITERATIONS; i++) {
       const w = await newWallet('100.00');
       const results = await race(w, [
@@ -83,7 +83,7 @@ describe('disputa pelo saldo da mesma wallet', () => {
     }
   });
 
-  test('30 apostas de 10.00 sobre 100.00: exatamente 10 passam e o saldo zera, nunca negativo', async () => {
+  test('30 bets of 10.00 against 100.00: exactly 10 go through and the balance hits zero, never negative', async () => {
     const w = await newWallet('100.00');
     const results = await race(
       w,
@@ -99,7 +99,7 @@ describe('disputa pelo saldo da mesma wallet', () => {
     expect(await api.balanceOf(w)).toEqual({ amount: '0.00', version: 11 });
     expect(await countEntries(w, 'DEBIT')).toBe(10);
 
-    // o saldo observado de cada aposta aceita é único: as decisões foram serializadas
+    // the observed balance for each accepted bet is unique: decisions were serialized
     const observed = results
       .filter((r) => r.body.status === 'PROCESSED')
       .map((r) => r.body.balance.amount)
@@ -118,7 +118,7 @@ describe('disputa pelo saldo da mesma wallet', () => {
     ]);
   });
 
-  test('operações mistas simultâneas: o saldo final é exatamente o das operações aceitas', async () => {
+  test('simultaneous mixed operations: the final balance is exactly that of the accepted operations', async () => {
     for (let i = 0; i < ITERATIONS; i++) {
       const w = await newWallet('50.00');
       const operations: Operation[] = [
@@ -128,7 +128,7 @@ describe('disputa pelo saldo da mesma wallet', () => {
       ];
       const results = await race(w, operations);
 
-      // saldo esperado, calculado só a partir do que a API disse ter aceitado
+      // expected balance, computed only from what the API said it accepted
       let expected = Money.from({ amount: '50.00', currency: 'BRL' });
       results.forEach((result, index) => {
         if (result.body.status !== 'PROCESSED') return;
@@ -154,10 +154,10 @@ describe('disputa pelo saldo da mesma wallet', () => {
   });
 });
 
-// ===================================================================== idempotência sob corrida
+// ===================================================================== idempotency under race
 
-describe('idempotência sob corrida', () => {
-  test(`a mesma aposta 50 vezes em paralelo gera um único débito, repetido ${Math.ceil(ITERATIONS / 2)} vezes`, async () => {
+describe('idempotency under race', () => {
+  test(`the same bet 50 times in parallel generates a single debit, repeated ${Math.ceil(ITERATIONS / 2)} times`, async () => {
     for (let i = 0; i < Math.ceil(ITERATIONS / 2); i++) {
       const w = await newWallet('100.00');
       const op: Operation = {
@@ -182,7 +182,7 @@ describe('idempotência sob corrida', () => {
     }
   });
 
-  test('a mesma key em wallets diferentes ao mesmo tempo: uma processa, as outras são conflito', async () => {
+  test('the same key on different wallets at the same time: one processes, the others conflict', async () => {
     const wallets = await Promise.all(times(5, () => newWallet('100.00')));
     const externalId = crypto.randomUUID();
     const results = await Promise.all(
@@ -204,7 +204,7 @@ describe('idempotência sob corrida', () => {
     expect(row!.n).toBe('1');
   });
 
-  test('REFUNDs simultâneos da mesma BET (ids diferentes): só um devolve o valor', async () => {
+  test('simultaneous REFUNDs of the same BET (different ids): only one refunds the amount', async () => {
     for (let i = 0; i < ITERATIONS; i++) {
       const w = await newWallet('100.00');
       const bet = await api.submit(w, { kind: 'BET', amount: '40.00' });
@@ -229,7 +229,7 @@ describe('idempotência sob corrida', () => {
     }
   });
 
-  test('criação simultânea da mesma wallet: uma 201, as outras 409', async () => {
+  test('simultaneous creation of the same wallet: one 201, the others 409', async () => {
     const playerId = crypto.randomUUID();
     const results = await Promise.all(
       times(10, () => api.openWallet('10.00', { playerId })),
@@ -240,10 +240,10 @@ describe('idempotência sob corrida', () => {
   });
 });
 
-// ===================================================================== wallets diferentes
+// ===================================================================== different wallets
 
-describe('wallets diferentes em paralelo', () => {
-  test('20 wallets com 5 apostas cada, tudo ao mesmo tempo: cada uma fecha certo', async () => {
+describe('different wallets in parallel', () => {
+  test('20 wallets with 5 bets each, all at the same time: each one settles correctly', async () => {
     const wallets = await Promise.all(times(20, () => newWallet('100.00')));
     await Promise.all(
       wallets.flatMap((w) =>
@@ -256,11 +256,11 @@ describe('wallets diferentes em paralelo', () => {
     }
   });
 
-  test('o lock é por wallet: com a wallet A travada, a wallet B responde na hora e A espera', async () => {
+  test('the lock is per wallet: with wallet A locked, wallet B responds right away and A waits', async () => {
     const a = await newWallet('100.00');
     const b = await newWallet('100.00');
 
-    // segura o lock da wallet A por fora da aplicação, como se outra transação estivesse em curso
+    // holds wallet A's lock from outside the application, as if another transaction were in progress
     let release!: () => void;
     const held = new Promise<void>((resolve) => {
       release = resolve;
@@ -287,11 +287,11 @@ describe('wallets diferentes em paralelo', () => {
     const onA = await pendingOnA;
 
     expect(onB.status).toBe(200);
-    expect(elapsedB).toBeLessThan(1_000); // B não esperou o lock de A (que segue travado)
-    expect(onA.status).toBe(200); // A esperou e processou assim que o lock foi solto
+    expect(elapsedB).toBeLessThan(1_000); // B didn't wait for A's lock (which is still held)
+    expect(onA.status).toBe(200); // A waited and processed as soon as the lock was released
   });
 
-  test('esperar o lock além do lock_timeout vira 503 com Retry-After, sem efeito colateral', async () => {
+  test('waiting for the lock past lock_timeout becomes a 503 with Retry-After, no side effect', async () => {
     const w = await newWallet('100.00');
 
     let release!: () => void;
@@ -305,7 +305,7 @@ describe('wallets diferentes em paralelo', () => {
     const holder = p.tm.runInTransaction(async () => {
       await p.wallets.findByIdForUpdate(w.walletId);
       locked();
-      await held; // segura o lock além dos 2 s de lock_timeout da aplicação
+      await held; // holds the lock past the application's 2s lock_timeout
     });
     await lockTaken;
 
@@ -327,7 +327,7 @@ describe('wallets diferentes em paralelo', () => {
     expect(response.headers.get('retry-after')).toBe('1');
     expect(await api.balanceOf(w)).toEqual({ amount: '100.00', version: 1 });
 
-    // reenviar a mesma requisição depois funciona: nada ficou gravado da tentativa anterior
+    // resending the same request afterwards works: nothing from the previous attempt was persisted
     const retry = await api.submit(w, op);
     expect(retry.status).toBe(200);
     expect(retry.body.idempotentReplay).toBe(false);

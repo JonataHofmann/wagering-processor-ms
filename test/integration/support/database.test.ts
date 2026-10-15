@@ -32,7 +32,7 @@ describe('createIsolatedDatabase', () => {
     await b.drop();
   });
 
-  test('cria um banco já migrado, acessível como a aplicação', async () => {
+  test('creates an already-migrated database, accessible as the application', async () => {
     const [me] = await query<{ current_user: string }>(
       a.appUrl,
       'SELECT current_user',
@@ -55,7 +55,7 @@ describe('createIsolatedDatabase', () => {
     ]);
   });
 
-  test('cada banco é isolado dos outros', async () => {
+  test('each database is isolated from the others', async () => {
     await query(
       a.appUrl,
       `
@@ -76,7 +76,7 @@ describe('createIsolatedDatabase', () => {
     expect(inB?.n).toBe('0');
   });
 
-  test('a cópia carrega os triggers e as permissões do template', async () => {
+  test('the copy carries over the triggers and permissions from the template', async () => {
     const triggers = await query<{ n: string }>(
       a.ownerUrl,
       `SELECT count(DISTINCT trigger_name) AS n FROM information_schema.triggers`,

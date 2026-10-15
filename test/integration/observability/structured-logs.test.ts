@@ -35,7 +35,7 @@ afterAll(async () => {
 
 type LogLine = Record<string, any>;
 
-/** Todas as linhas que o processo escreveu, já interpretadas como JSON. */
+/** All lines the process wrote, already parsed as JSON. */
 function logLines(): LogLine[] {
   return app
     .output()
@@ -52,17 +52,17 @@ async function newWallet(): Promise<TestWallet> {
   return (await walletClient(app.request).openWallet('100.00')).wallet;
 }
 
-describe('logs estruturados', () => {
-  describe('logs estruturados', () => {
-    test('toda linha escrita pelo processo é um JSON com time, level e service', async () => {
-      // a linha app_started é escrita logo depois do listen: pode chegar um instante depois do health check
+describe('structured logs', () => {
+  describe('structured logs', () => {
+    test('every line written by the process is JSON with time, level and service', async () => {
+      // the app_started line is written right after listen: it may arrive an instant after the health check
       await waitFor(
         async () => find((l) => l.event === 'app_started') !== undefined,
         'app_started log line',
         5_000,
       );
 
-      const lines = logLines(); // JSON.parse lança se alguma linha não for JSON
+      const lines = logLines(); // JSON.parse throws if any line is not JSON
       expect(lines.length).toBeGreaterThan(0);
       for (const line of lines) {
         expect(line).toMatchObject({ service: 'wagering-processor' });
@@ -78,8 +78,8 @@ describe('logs estruturados', () => {
   });
 });
 
-describe('correlação HTTP', () => {
-  test('o X-Correlation-Id recebido volta na resposta e aparece na linha de acesso', async () => {
+describe('HTTP correlation', () => {
+  test('the received X-Correlation-Id comes back in the response and appears in the access log line', async () => {
     const response = await app.request('/health/live', {
       headers: { 'X-Correlation-Id': 'corr-health-1' },
     });
@@ -103,19 +103,19 @@ describe('correlação HTTP', () => {
     });
   });
 
-  test('sem header, um correlationId novo é gerado e devolvido', async () => {
+  test('without a header, a new correlationId is generated and returned', async () => {
     const response = await app.request('/health/live');
     expect(response.headers.get('x-correlation-id')).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  test('um X-Correlation-Id malformado é trocado por um novo', async () => {
+  test('a malformed X-Correlation-Id is replaced with a new one', async () => {
     const response = await app.request('/health/live', {
       headers: { 'X-Correlation-Id': 'tem espaço e ; aspas"' },
     });
     expect(response.headers.get('x-correlation-id')).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  test('a linha de acesso da aposta traz walletId e transactionId, e os eventos carregam o mesmo correlationId', async () => {
+  test('the bet access log line carries walletId and transactionId, and the events carry the same correlationId', async () => {
     const w = await newWallet();
     const { key, body } = walletClient(app.request).payload(w, {
       kind: 'BET',
@@ -161,8 +161,8 @@ describe('correlação HTTP', () => {
   });
 });
 
-describe('correlação na fila', () => {
-  test('o processamento de uma mensagem loga messageId, correlationId, walletId e transactionId', async () => {
+describe('queue correlation', () => {
+  test('processing a message logs messageId, correlationId, walletId and transactionId', async () => {
     const w = await newWallet();
     const externalTransactionId = crypto.randomUUID();
     const message = {

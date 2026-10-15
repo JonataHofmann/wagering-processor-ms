@@ -10,7 +10,7 @@ import { queryOnce } from '@/test/support/pg';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 let t: TestApp;
-let p: Persistence; // acesso direto ao mesmo banco, para preparar e conferir dados
+let p: Persistence; // direct access to the same database, to prepare and check data
 
 beforeAll(async () => {
   t = await startTestApp();
@@ -42,7 +42,7 @@ function newPlayer(): string {
   return crypto.randomUUID();
 }
 
-/** Aposta gravada direto pelos repositórios (o endpoint de apostas vem na etapa 11). */
+/** Bet recorded directly through the repositories (the betting endpoint comes in step 11). */
 async function placeBet(walletId: string, amount: string): Promise<void> {
   await p.tm.runInTransaction(async () => {
     const wallet = (await p.wallets.findByIdForUpdate(walletId))!;
@@ -78,7 +78,7 @@ async function placeBet(walletId: string, amount: string): Promise<void> {
 // ============================================================== POST /wallets
 
 describe('POST /wallets', () => {
-  test('201 com saldo inicial e versão 1, no formato do enunciado', async () => {
+  test('201 with initial balance and version 1, in the format described in the spec', async () => {
     const playerId = newPlayer();
     const { status, body } = await createWallet({
       playerId,
@@ -94,7 +94,7 @@ describe('POST /wallets', () => {
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  test('saldo inicial > 0 grava OPENING, lançamento CREDIT e 2 eventos, na mesma transação', async () => {
+  test('initial balance > 0 writes OPENING, a CREDIT entry and 2 events, in the same transaction', async () => {
     const { body } = await createWallet(
       {
         playerId: newPlayer(),
@@ -144,7 +144,7 @@ describe('POST /wallets', () => {
     ]);
   });
 
-  test('saldo inicial zero: sem OPENING, sem lançamento, sem evento', async () => {
+  test('zero initial balance: no OPENING, no ledger entry, no event', async () => {
     const { status, body } = await createWallet({
       playerId: newPlayer(),
       initialBalance: { amount: '0.00', currency: 'BRL' },
@@ -166,7 +166,7 @@ describe('POST /wallets', () => {
     expect(counts).toEqual({ txs: '0', entries: '0', events: '0' });
   });
 
-  test('409 para wallet duplicada do mesmo jogador e moeda', async () => {
+  test('409 for a duplicate wallet of the same player and currency', async () => {
     const playerId = newPlayer();
     await createWallet({
       playerId,
@@ -181,7 +181,7 @@ describe('POST /wallets', () => {
     expect(body.error.code).toBe('WALLET_ALREADY_EXISTS');
   });
 
-  test('o mesmo jogador pode ter wallets em moedas diferentes', async () => {
+  test('the same player can have wallets in different currencies', async () => {
     const playerId = newPlayer();
     expect(
       (
@@ -202,24 +202,24 @@ describe('POST /wallets', () => {
   });
 
   test.each([
-    ['corpo vazio', {}, 'VALIDATION_ERROR'],
+    ['empty body', {}, 'VALIDATION_ERROR'],
     [
-      'playerId ausente',
+      'missing playerId',
       { initialBalance: { amount: '1.00', currency: 'BRL' } },
       'VALIDATION_ERROR',
     ],
     [
-      'playerId fora do formato UUID',
+      'playerId not in UUID format',
       { playerId: 'abc', initialBalance: { amount: '1.00', currency: 'BRL' } },
       'VALIDATION_ERROR',
     ],
     [
-      'initialBalance ausente',
+      'missing initialBalance',
       { playerId: crypto.randomUUID() },
       'VALIDATION_ERROR',
     ],
     [
-      'amount como número',
+      'amount as a number',
       {
         playerId: crypto.randomUUID(),
         initialBalance: { amount: 1000, currency: 'BRL' },
@@ -227,7 +227,7 @@ describe('POST /wallets', () => {
       'VALIDATION_ERROR',
     ],
     [
-      'amount com 3 casas',
+      'amount with 3 decimal places',
       {
         playerId: crypto.randomUUID(),
         initialBalance: { amount: '10.005', currency: 'BRL' },
@@ -235,7 +235,7 @@ describe('POST /wallets', () => {
       'INVALID_AMOUNT',
     ],
     [
-      'amount negativo',
+      'negative amount',
       {
         playerId: crypto.randomUUID(),
         initialBalance: { amount: '-1.00', currency: 'BRL' },
@@ -243,7 +243,7 @@ describe('POST /wallets', () => {
       'INVALID_AMOUNT',
     ],
     [
-      'notação científica',
+      'scientific notation',
       {
         playerId: crypto.randomUUID(),
         initialBalance: { amount: '1e3', currency: 'BRL' },
@@ -251,31 +251,31 @@ describe('POST /wallets', () => {
       'INVALID_AMOUNT',
     ],
     [
-      'moeda minúscula',
+      'lowercase currency',
       {
         playerId: crypto.randomUUID(),
         initialBalance: { amount: '1.00', currency: 'brl' },
       },
       'INVALID_CURRENCY',
     ],
-  ])('400 para %s', async (_, body, code) => {
+  ])('400 for %s', async (_, body, code) => {
     const response = await createWallet(body);
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe(code);
   });
 
-  test('400 lista todas as violações de uma vez', async () => {
+  test('400 lists all violations at once', async () => {
     const { status, body } = await createWallet({ playerId: 'abc' });
     expect(status).toBe(400);
-    // initialBalance ausente por inteiro: o class-validator não desce para
-    // initialBalance.amount/currency quando não há objeto nenhum para validar.
+    // initialBalance entirely missing: class-validator does not descend into
+    // initialBalance.amount/currency when there is no object at all to validate.
     expect(body.error.details.map((d: { field: string }) => d.field)).toEqual([
       'playerId',
       'initialBalance',
     ]);
   });
 
-  test('JSON malformado é 400, não 500', async () => {
+  test('malformed JSON is 400, not 500', async () => {
     const response = await t.request('/wallets', {
       method: 'POST',
       body: '{"playerId": ',
@@ -287,7 +287,7 @@ describe('POST /wallets', () => {
 // ============================================================== GET /wallets/:id
 
 describe('GET /wallets/:walletId', () => {
-  test('200 com o estado atual', async () => {
+  test('200 with the current state', async () => {
     const { body: created } = await createWallet({
       playerId: newPlayer(),
       initialBalance: { amount: '100.00', currency: 'BRL' },
@@ -303,7 +303,7 @@ describe('GET /wallets/:walletId', () => {
     });
   });
 
-  test('404 para wallet inexistente', async () => {
+  test('404 for a nonexistent wallet', async () => {
     const response = await t.request(`/wallets/${crypto.randomUUID()}`);
     expect(response.status).toBe(404);
     expect(((await response.json()) as any).error.code).toBe(
@@ -311,7 +311,7 @@ describe('GET /wallets/:walletId', () => {
     );
   });
 
-  test('400 para id fora do formato UUID', async () => {
+  test('400 for an id not in UUID format', async () => {
     const response = await t.request('/wallets/nao-e-uuid');
     expect(response.status).toBe(400);
   });
@@ -320,7 +320,7 @@ describe('GET /wallets/:walletId', () => {
 // ============================================================== GET /wallets/:id/ledger
 
 describe('GET /wallets/:walletId/ledger', () => {
-  test('pagina com cursor estável e opaco até o fim', async () => {
+  test('paginates with a stable, opaque cursor to the end', async () => {
     const { body: created } = await createWallet({
       playerId: newPlayer(),
       initialBalance: { amount: '100.00', currency: 'BRL' },
@@ -348,7 +348,7 @@ describe('GET /wallets/:walletId/ledger', () => {
     expect(pages).toBe(3);
   });
 
-  test('cada item traz valores como MoneyProps e o saldo antes e depois', async () => {
+  test('each item carries values as MoneyProps and the balance before and after', async () => {
     const { body: created } = await createWallet({
       playerId: newPlayer(),
       initialBalance: { amount: '50.00', currency: 'BRL' },
@@ -367,7 +367,7 @@ describe('GET /wallets/:walletId/ledger', () => {
     });
   });
 
-  test('wallet sem movimentos devolve página vazia', async () => {
+  test('a wallet with no movements returns an empty page', async () => {
     const { body: created } = await createWallet({
       playerId: newPlayer(),
       initialBalance: { amount: '0.00', currency: 'BRL' },
@@ -379,11 +379,11 @@ describe('GET /wallets/:walletId/ledger', () => {
   });
 
   test.each([
-    ['cursor inválido', '?cursor=nao-e-um-cursor'],
-    ['limit zero', '?limit=0'],
-    ['limit acima do máximo', '?limit=201'],
-    ['limit não numérico', '?limit=abc'],
-  ])('400 para %s', async (_, query) => {
+    ['invalid cursor', '?cursor=nao-e-um-cursor'],
+    ['zero limit', '?limit=0'],
+    ['limit above the maximum', '?limit=201'],
+    ['non-numeric limit', '?limit=abc'],
+  ])('400 for %s', async (_, query) => {
     const { body: created } = await createWallet({
       playerId: newPlayer(),
       initialBalance: { amount: '1.00', currency: 'BRL' },
@@ -392,7 +392,7 @@ describe('GET /wallets/:walletId/ledger', () => {
     expect(response.status).toBe(400);
   });
 
-  test('404 para wallet inexistente', async () => {
+  test('404 for a nonexistent wallet', async () => {
     const response = await t.request(`/wallets/${crypto.randomUUID()}/ledger`);
     expect(response.status).toBe(404);
   });

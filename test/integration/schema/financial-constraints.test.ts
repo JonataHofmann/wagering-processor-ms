@@ -25,7 +25,7 @@ afterAll(async () => {
 });
 
 describe('wallets', () => {
-  test('no máximo uma wallet por player + moeda', async () => {
+  test('at most one wallet per player + currency', async () => {
     const w = await openWallet(app, '0.00');
     const code = await sqlState(
       app.query(
@@ -36,14 +36,14 @@ describe('wallets', () => {
     expect(code).toBe('23505');
   });
 
-  test('saldo negativo é barrado mesmo com bug na aplicação', async () => {
+  test('negative balance is blocked even with a bug in the application', async () => {
     const w = await openWallet(app, '100.00');
     expect(
       await sqlState(applyMovement(app, w, { kind: 'BET', amount: '150.00' })),
     ).toBe('23514');
   });
 
-  test('valor com 3 casas decimais é rejeitado, não arredondado', async () => {
+  test('value with 3 decimal places is rejected, not rounded', async () => {
     const code = await sqlState(
       app.query(
         `INSERT INTO wallets (id, player_id, currency, balance, version) VALUES ($1, $2, 'BRL', '10.005', 1)`,
@@ -53,7 +53,7 @@ describe('wallets', () => {
     expect(code).toBe('23514');
   });
 
-  test('moeda precisa ser ISO-4217 em maiúsculas', async () => {
+  test('currency must be ISO-4217 uppercase', async () => {
     const code = await sqlState(
       app.query(
         `INSERT INTO wallets (id, player_id, currency, balance, version) VALUES ($1, $2, 'brl', '0.00', 1)`,
@@ -65,7 +65,7 @@ describe('wallets', () => {
 });
 
 describe('wager_transactions', () => {
-  test('idempotency key duplicada é barrada', async () => {
+  test('duplicate idempotency key is blocked', async () => {
     const w = await openWallet(app, '0.00');
     const first = await insertTransaction(app, w);
     const code = await sqlState(
@@ -76,7 +76,7 @@ describe('wager_transactions', () => {
     expect(code).toBe('23505');
   });
 
-  test('o mesmo id externo do mesmo provedor é barrado, mesmo com outra key', async () => {
+  test('the same external id from the same provider is blocked, even with a different key', async () => {
     const w = await openWallet(app, '0.00');
     const first = await insertTransaction(app, w);
     const code = await sqlState(
@@ -88,7 +88,7 @@ describe('wager_transactions', () => {
     expect(code).toBe('23505');
   });
 
-  test('REFUND e ROLLBACK exigem referência', async () => {
+  test('REFUND and ROLLBACK require a reference', async () => {
     const w = await openWallet(app, '0.00');
     expect(await sqlState(insertTransaction(app, w, { kind: 'REFUND' }))).toBe(
       '23514',
@@ -98,7 +98,7 @@ describe('wager_transactions', () => {
     ).toBe('23514');
   });
 
-  test('BET não pode ter referência', async () => {
+  test('BET cannot have a reference', async () => {
     const w = await openWallet(app, '0.00');
     const code = await sqlState(
       insertTransaction(app, w, {
@@ -109,14 +109,14 @@ describe('wager_transactions', () => {
     expect(code).toBe('23514');
   });
 
-  test('OPENING não pode ser submetido por um provedor', async () => {
+  test('OPENING cannot be submitted by a provider', async () => {
     const w = await openWallet(app, '0.00');
     expect(await sqlState(insertTransaction(app, w, { kind: 'OPENING' }))).toBe(
       '23514',
     );
   });
 
-  test('REJECTED exige failure_code', async () => {
+  test('REJECTED requires failure_code', async () => {
     const w = await openWallet(app, '0.00');
     const code = await sqlState(
       insertTransaction(app, w, {
@@ -127,7 +127,7 @@ describe('wager_transactions', () => {
     expect(code).toBe('23514');
   });
 
-  test('PENDING_REFERENCE exige agenda de reprocessamento', async () => {
+  test('PENDING_REFERENCE requires a reprocessing schedule', async () => {
     const w = await openWallet(app, '0.00');
     const code = await sqlState(
       insertTransaction(app, w, {
@@ -139,12 +139,12 @@ describe('wager_transactions', () => {
     expect(code).toBe('23514');
   });
 
-  test('uma referência só pode ser revertida uma vez', async () => {
+  test('a reference can only be reversed once', async () => {
     const w = await openWallet(app, '100.00');
     const bet = await applyMovement(app, w, { kind: 'BET', amount: '10.00' });
     await applyMovement(app, w, { kind: 'REFUND', amount: '10.00', ref: bet });
 
-    // nem um segundo REFUND, nem um ROLLBACK da mesma BET
+    // neither a second REFUND, nor a ROLLBACK of the same BET
     expect(
       await sqlState(
         applyMovement(app, w, { kind: 'REFUND', amount: '10.00', ref: bet }),
@@ -165,8 +165,8 @@ describe('wager_transactions', () => {
 
 describe('wallet_ledger_entries', () => {
   /**
-   * Insere um lançamento para uma transação que ainda NÃO tem lançamento,
-   * para que a única violação seja a que o teste quer provar.
+   * Insert a ledger entry for a transaction that does NOT yet have an entry,
+   * so that the only violation is the one the test wants to prove.
    */
   async function insertEntry(values: {
     currency: string;
@@ -174,7 +174,7 @@ describe('wallet_ledger_entries', () => {
     balanceAfter: string;
   }): Promise<string | undefined> {
     const w = await openWallet(app, '100.00');
-    const tx = await insertTransaction(app, w); // LOSS pendente: sem lançamento
+    const tx = await insertTransaction(app, w); // pending LOSS: no entry
     return sqlState(
       app.query(
         `INSERT INTO wallet_ledger_entries
@@ -192,8 +192,8 @@ describe('wallet_ledger_entries', () => {
     );
   }
 
-  test('aritmética do lançamento é verificada', async () => {
-    // 100 - 10 deveria ser 90, não 85
+  test('ledger entry arithmetic is checked', async () => {
+    // 100 - 10 should be 90, not 85
     expect(
       await insertEntry({
         currency: 'BRL',
@@ -203,8 +203,8 @@ describe('wallet_ledger_entries', () => {
     ).toBe('23514');
   });
 
-  test('moeda do lançamento precisa ser a da wallet', async () => {
-    // aritmética correta, só a moeda está errada
+  test('ledger entry currency must match the wallet currency', async () => {
+    // correct arithmetic, only the currency is wrong
     expect(
       await insertEntry({
         currency: 'USD',

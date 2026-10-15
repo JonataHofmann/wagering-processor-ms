@@ -28,7 +28,7 @@ function newWallet(balance = '0.00') {
 }
 
 describe('MikroTransactionManager', () => {
-  test('commit: o que foi gravado dentro da transação fica visível depois', async () => {
+  test('commit: what was written inside the transaction is visible afterward', async () => {
     const wallet = newWallet();
     await p.tm.runInTransaction(() => p.wallets.insert(wallet));
     const found = await p.tm.runInTransaction(() =>
@@ -37,7 +37,7 @@ describe('MikroTransactionManager', () => {
     expect(found?.id).toBe(wallet.id);
   });
 
-  test('rollback: erro dentro da transação desfaz tudo', async () => {
+  test('rollback: error inside the transaction undoes everything', async () => {
     const wallet = newWallet();
     await expect(
       p.tm.runInTransaction(async () => {
@@ -51,8 +51,8 @@ describe('MikroTransactionManager', () => {
     ).toBeUndefined();
   });
 
-  test('erro dos triggers deferidos aparece no COMMIT e desfaz tudo', async () => {
-    const wallet = newWallet('10.00'); // saldo inicial, mas sem gravar OPENING nem lançamento
+  test('error from deferred triggers surfaces at COMMIT and undoes everything', async () => {
+    const wallet = newWallet('10.00'); // initial balance, but without writing OPENING or a ledger entry
     const error = await p.tm
       .runInTransaction(() => p.wallets.insert(wallet))
       .catch((e: unknown) => e);
@@ -62,7 +62,7 @@ describe('MikroTransactionManager', () => {
     ).toBeUndefined();
   });
 
-  test('aplica lock_timeout e statement_timeout locais', async () => {
+  test('applies local lock_timeout and statement_timeout', async () => {
     const settings = await p.tm.runInTransaction(async () =>
       p.context
         .current()
@@ -73,19 +73,19 @@ describe('MikroTransactionManager', () => {
     expect(settings[0]).toEqual({ lock: '2s', statement: '5s' });
   });
 
-  test('repositório fora de transação é bug', async () => {
+  test('repository used outside a transaction is a bug', async () => {
     await expect(p.wallets.findById(crypto.randomUUID())).rejects.toThrow(
       InvariantViolationError,
     );
   });
 
-  test('transação aninhada é bug', async () => {
+  test('nested transaction is a bug', async () => {
     await expect(
       p.tm.runInTransaction(() => p.tm.runInTransaction(async () => 1)),
     ).rejects.toThrow(InvariantViolationError);
   });
 
-  test('transações concorrentes usam EntityManagers isolados', async () => {
+  test('concurrent transactions use isolated EntityManagers', async () => {
     const wallets = Array.from({ length: 10 }, () => newWallet());
     await Promise.all(
       wallets.map((w) => p.tm.runInTransaction(() => p.wallets.insert(w))),

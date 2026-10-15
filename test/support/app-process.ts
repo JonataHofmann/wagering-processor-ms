@@ -6,19 +6,19 @@ export interface AppProcess {
   pid: number;
   baseUrl: string;
   request: RequestFn;
-  /** resolve quando o processo termina (por qualquer motivo) */
+  /** resolves when the process exits (for any reason) */
   exited: Promise<void>;
-  /** sinal que matou o processo (ex.: "SIGKILL"), se for o caso */
+  /** signal that killed the process (e.g. "SIGKILL"), if any */
   signalCode(): string | null;
-  /** final da saída (stdout + stderr) do processo */
+  /** tail of the process's output (stdout + stderr) */
   output(): string;
-  /** SIGTERM e espera terminar (SIGKILL após 10 s) */
+  /** SIGTERM and waits for exit (SIGKILL after 10s) */
   stop(): Promise<void>;
-  /** SIGKILL imediato, sem shutdown */
+  /** immediate SIGKILL, no shutdown */
   kill(): Promise<void>;
 }
 
-/** Pede ao sistema uma porta TCP livre. */
+/** Asks the OS for a free TCP port. */
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
@@ -30,7 +30,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-/** Lê continuamente a saída do processo (para o buffer não encher) e guarda o final. */
+/** Continuously reads the process's output (so the buffer doesn't fill up) and keeps the tail. */
 function drain(
   stream: ReadableStream<Uint8Array>,
   sink: { text: string },
@@ -55,7 +55,7 @@ async function waitUntilLive(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (process.exitCode !== null) {
-      await Bun.sleep(50); // deixa a última saída chegar
+      await Bun.sleep(50); // let the last bit of output arrive
       throw new Error(
         `app process exited early with code ${process.exitCode}. Last output:\n${output.text}`,
       );
@@ -64,7 +64,7 @@ async function waitUntilLive(
       const response = await fetch(`${baseUrl}/health/live`);
       if (response.ok) return;
     } catch {
-      // ainda subindo
+      // still starting up
     }
     await Bun.sleep(100);
   }
@@ -74,9 +74,9 @@ async function waitUntilLive(
 }
 
 /**
- * Sobe a aplicação real como um PROCESSO separado (bun src/main.ts), com seu próprio
- * pool de conexões, contra o banco informado. É o que diferencia este teste do
- * single-instance: nada é compartilhado em memória entre as instâncias.
+ * Starts the real application as a separate PROCESS (bun src/main.ts), with its own
+ * connection pool, against the given database. This is what sets this test apart from
+ * the single-instance one: nothing is shared in memory between instances.
  */
 export async function startAppProcess(
   databaseUrl: string,
@@ -86,11 +86,11 @@ export async function startAppProcess(
   const baseUrl = `http://127.0.0.1:${port}`;
   const debug = process.env.APP_PROCESS_LOGS === 'true';
 
-  // process.execPath: o mesmo binário do Bun que roda os testes (não depende do PATH)
+  // process.execPath: the same Bun binary running the tests (doesn't depend on PATH)
   const child = Bun.spawn([process.execPath, 'src/main.ts'], {
-    // toda instância sempre consome/publica/agenda (sem papéis) — quem chama é
-    // responsável por isolar a fila via extraEnv quando isso importar (ver
-    // test/support/sqs.ts); sem isso, herda a config de fila do .env ambiente.
+    // every instance always consumes/publishes/schedules (no roles) — the caller is
+    // responsible for isolating the queue via extraEnv when that matters (see
+    // test/support/sqs.ts); without that, it inherits the queue config from the .env environment.
     env: {
       ...process.env,
       MIKRO_ORM_DEBUG: 'false',
@@ -135,7 +135,7 @@ export async function startAppProcess(
       });
     },
     async stop() {
-      child.kill('SIGTERM'); // shutdown gracioso: fecha HTTP e o pool (enableShutdownHooks)
+      child.kill('SIGTERM'); // graceful shutdown: closes HTTP and the pool (enableShutdownHooks)
       const exited = await Promise.race([
         child.exited,
         Bun.sleep(10_000).then(() => 'timeout' as const),

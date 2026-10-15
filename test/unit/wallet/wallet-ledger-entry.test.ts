@@ -29,13 +29,13 @@ function props(
 }
 
 describe('WalletLedgerEntry.create', () => {
-  test('aceita débito balanceado', () => {
+  test('accepts a balanced debit', () => {
     const entry = WalletLedgerEntry.create(props());
     expect(entry.isBalanced()).toBe(true);
     expect(entry.signedMoney().amount).toBe('-25.00');
   });
 
-  test('aceita crédito balanceado', () => {
+  test('accepts a balanced credit', () => {
     const entry = WalletLedgerEntry.create(
       props({
         direction: LedgerDirection.Credit,
@@ -47,25 +47,25 @@ describe('WalletLedgerEntry.create', () => {
   });
 
   test.each([
-    ['aritmética errada', { balanceAfter: brl('80.00') }],
-    ['direção trocada', { direction: LedgerDirection.Credit }],
-    ['valor zero', { money: brl('0.00'), balanceAfter: brl('100.00') }],
+    ['wrong arithmetic', { balanceAfter: brl('80.00') }],
+    ['swapped direction', { direction: LedgerDirection.Credit }],
+    ['zero amount', { money: brl('0.00'), balanceAfter: brl('100.00') }],
     [
-      'valor negativo',
+      'negative amount',
       { money: brl('25.00').negate(), balanceAfter: brl('125.00') },
     ],
     [
-      'saldo final negativo',
+      'negative final balance',
       {
         balanceBefore: brl('10.00'),
         balanceAfter: brl('10.00').subtract(brl('25.00')),
       },
     ],
-    ['moeda do valor diferente', { money: usd('25.00') }],
-    ['moeda do saldo final diferente', { balanceAfter: usd('75.00') }],
-    ['versão zero', { walletVersion: 0 }],
-    ['versão fracionária', { walletVersion: 1.5 }],
-  ])('recusa %s com InvariantViolationError', (_, overrides) => {
+    ['different amount currency', { money: usd('25.00') }],
+    ['different final balance currency', { balanceAfter: usd('75.00') }],
+    ['zero version', { walletVersion: 0 }],
+    ['fractional version', { walletVersion: 1.5 }],
+  ])('rejects %s with InvariantViolationError', (_, overrides) => {
     expect(() =>
       WalletLedgerEntry.create(
         props(overrides as Partial<CreateLedgerEntryProps>),
@@ -73,10 +73,10 @@ describe('WalletLedgerEntry.create', () => {
     ).toThrow(InvariantViolationError);
   });
 
-  test('violação de invariante não é DomainError: bug nunca vira rejeição de negócio', () => {
+  test('invariant violation is not a DomainError: a bug never becomes a business rejection', () => {
     try {
       WalletLedgerEntry.create(props({ balanceAfter: brl('80.00') }));
-      throw new Error('deveria ter lançado');
+      throw new Error('should have thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(InvariantViolationError);
       expect(error).not.toBeInstanceOf(DomainError);
@@ -84,8 +84,8 @@ describe('WalletLedgerEntry.create', () => {
   });
 });
 
-describe('imutabilidade', () => {
-  test('o lançamento é congelado', () => {
+describe('immutability', () => {
+  test('the entry is frozen', () => {
     const entry = WalletLedgerEntry.create(props());
     expect(Object.isFrozen(entry)).toBe(true);
     expect(() => {
@@ -95,11 +95,11 @@ describe('imutabilidade', () => {
 });
 
 describe('WalletLedgerEntry.rehydrate', () => {
-  test('reconstrói sem revalidar, como exige a regra 6.0', () => {
+  test('reconstructs without revalidating, as required by rule 6.0', () => {
     const corrupted = WalletLedgerEntry.rehydrate(
       props({ balanceAfter: brl('80.00') }),
     );
     expect(corrupted.balanceAfter.amount).toBe('80.00');
-    expect(corrupted.isBalanced()).toBe(false); // detectável, mas não bloqueado na leitura
+    expect(corrupted.isBalanced()).toBe(false); // detectable, but not blocked on read
   });
 });

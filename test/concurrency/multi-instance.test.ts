@@ -31,8 +31,8 @@ let api: ReturnType<typeof walletClient>;
 
 beforeAll(async () => {
   db = await createIsolatedDatabase();
-  // sem papéis, toda instância sempre consome/publica — isola a fila aqui pra
-  // essas 3 instâncias (este teste é só de HTTP) não tocarem a fila real de dev.
+  // no roles, every instance always consumes/publishes — isolate the queue here so
+  // these 3 instances (this test is HTTP-only) don't touch the real dev queue.
   queues = await createTestQueues();
   const env = { ...consumerEnv(queues), ...relayEnv(queues) };
   apps = await Promise.all(
@@ -48,7 +48,7 @@ afterAll(async () => {
   await queues?.drop();
 }, 60_000);
 
-/** Distribui as requisições em rodízio entre as instâncias. */
+/** Distributes requests round-robin across instances. */
 function instance(i: number): RequestFn {
   return apps[i % apps.length]!.request;
 }
@@ -57,7 +57,7 @@ function times<T>(n: number, make: (i: number) => T): T[] {
   return Array.from({ length: n }, (_, i) => make(i));
 }
 
-/** Dispara as operações ao mesmo tempo, cada uma por uma instância (rodízio). */
+/** Fires the operations at the same time, each one through an instance (round-robin). */
 function raceAcrossInstances(
   w: TestWallet,
   operations: Operation[],
@@ -78,8 +78,8 @@ async function debits(w: TestWallet): Promise<number> {
   return Number(row!.n);
 }
 
-describe(`${INSTANCES} instâncias (processos separados) sobre o mesmo banco`, () => {
-  test('são processos distintos, cada um respondendo na sua porta', async () => {
+describe(`${INSTANCES} instances (separate processes) over the same database`, () => {
+  test('are distinct processes, each responding on its own port', async () => {
     expect(new Set(apps.map((a) => a.pid)).size).toBe(INSTANCES);
     expect(new Set(apps.map((a) => a.baseUrl)).size).toBe(INSTANCES);
     for (const app of apps) {
@@ -87,7 +87,7 @@ describe(`${INSTANCES} instâncias (processos separados) sobre o mesmo banco`, (
     }
   });
 
-  test(`cenário do enunciado com cada aposta numa instância, repetido ${ITERATIONS} vezes`, async () => {
+  test(`prompt scenario with each bet on a different instance, repeated ${ITERATIONS} times`, async () => {
     for (let i = 0; i < ITERATIONS; i++) {
       const w = await newWallet('100.00');
       const results = await raceAcrossInstances(w, [
@@ -104,7 +104,7 @@ describe(`${INSTANCES} instâncias (processos separados) sobre o mesmo banco`, (
     }
   });
 
-  test('a mesma aposta 60 vezes, 20 por instância: um único débito', async () => {
+  test('the same bet 60 times, 20 per instance: a single debit', async () => {
     for (let i = 0; i < Math.ceil(ITERATIONS / 2); i++) {
       const w = await newWallet('100.00');
       const op: Operation = {
@@ -126,7 +126,7 @@ describe(`${INSTANCES} instâncias (processos separados) sobre o mesmo banco`, (
     }
   });
 
-  test('30 apostas de 10.00 sobre 100.00 espalhadas: 10 aceitas, saldos observados únicos', async () => {
+  test('30 bets of 10.00 against 100.00 spread out: 10 accepted, unique observed balances', async () => {
     const w = await newWallet('100.00');
     const results = await raceAcrossInstances(
       w,
@@ -150,7 +150,7 @@ describe(`${INSTANCES} instâncias (processos separados) sobre o mesmo banco`, (
     expect(await api.balanceOf(w)).toEqual({ amount: '0.00', version: 11 });
   });
 
-  test('REFUNDs simultâneos da mesma BET, um por instância: só um devolve', async () => {
+  test('simultaneous REFUNDs of the same BET, one per instance: only one refunds', async () => {
     const w = await newWallet('100.00');
     const bet = await api.submit(w, { kind: 'BET', amount: '40.00' });
     const results = await raceAcrossInstances(
@@ -168,7 +168,7 @@ describe(`${INSTANCES} instâncias (processos separados) sobre o mesmo banco`, (
     expect(await api.balanceOf(w)).toEqual({ amount: '100.00', version: 3 });
   });
 
-  test('criação simultânea da mesma wallet por instâncias diferentes: uma 201', async () => {
+  test('simultaneous creation of the same wallet across different instances: one 201', async () => {
     const playerId = crypto.randomUUID();
     const results = await Promise.all(
       times(9, (i) =>
@@ -180,7 +180,7 @@ describe(`${INSTANCES} instâncias (processos separados) sobre o mesmo banco`, (
     expect(results.filter((r) => r.status === 409)).toHaveLength(8);
   });
 
-  test('wallets diferentes em paralelo pelas 3 instâncias: cada uma fecha certo', async () => {
+  test('different wallets in parallel across the 3 instances: each one settles correctly', async () => {
     const wallets = await Promise.all(times(15, () => newWallet('100.00')));
     await Promise.all(
       wallets.flatMap((w, wi) =>
@@ -194,7 +194,7 @@ describe(`${INSTANCES} instâncias (processos separados) sobre o mesmo banco`, (
     }
   });
 
-  test('o que uma instância grava, as outras leem (nenhum estado em memória)', async () => {
+  test('what one instance writes, the others read (no in-memory state)', async () => {
     const w = await newWallet('100.00');
     const op: Operation = {
       kind: 'BET',

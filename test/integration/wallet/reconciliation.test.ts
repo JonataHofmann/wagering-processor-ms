@@ -34,7 +34,7 @@ async function reconcile(
   return { status: response.status, body: (await response.json()) as Json };
 }
 
-/** Wallet com algum histórico: abertura 100, BET 30, WIN 50, BET 20 → 100. */
+/** Wallet with some history: opening 100, BET 30, WIN 50, BET 20 → 100. */
 async function walletWithHistory(): Promise<TestWallet> {
   const { wallet } = await api.openWallet('100.00');
   await api.submit(wallet, { kind: 'BET', amount: '30.00' });
@@ -44,8 +44,8 @@ async function walletWithHistory(): Promise<TestWallet> {
 }
 
 /**
- * Simula uma corrupção feita por fora da aplicação (ex.: um UPDATE manual em produção).
- * Só o owner consegue, e só desligando os triggers que existem justamente para impedir isso.
+ * Simulates corruption done outside the application (e.g., a manual UPDATE in production).
+ * Only the owner can do it, and only by disabling the triggers that exist precisely to prevent this.
  */
 async function corrupt(
   table: 'wallets' | 'wallet_ledger_entries',
@@ -61,7 +61,7 @@ async function corrupt(
 }
 
 describe('POST /wallets/:walletId/reconciliation', () => {
-  test('wallet saudável: consistente, sem divergências, saldos iguais', async () => {
+  test('healthy wallet: consistent, no divergences, equal balances', async () => {
     const w = await walletWithHistory();
     const { status, body } = await reconcile(w.walletId);
 
@@ -79,7 +79,7 @@ describe('POST /wallets/:walletId/reconciliation', () => {
     });
   });
 
-  test('wallet aberta com saldo zero e nunca movimentada: consistente', async () => {
+  test('wallet opened with zero balance and never moved: consistent', async () => {
     const { wallet } = await api.openWallet('0.00');
     const { body } = await reconcile(wallet.walletId);
     expect(body).toMatchObject({
@@ -90,7 +90,7 @@ describe('POST /wallets/:walletId/reconciliation', () => {
     });
   });
 
-  test('saldo alterado por fora: BALANCE_MISMATCH, log e métrica, e o saldo NÃO é corrigido', async () => {
+  test('balance altered from outside: BALANCE_MISMATCH, log and metric, and the balance is NOT corrected', async () => {
     const w = await walletWithHistory();
     await corrupt(
       'wallets',
@@ -104,7 +104,7 @@ describe('POST /wallets/:walletId/reconciliation', () => {
 
     const { status, body } = await reconcile(w.walletId);
 
-    expect(status).toBe(200); // divergência é um achado, não um erro da requisição
+    expect(status).toBe(200); // divergence is a finding, not a request error
     expect(body.consistent).toBe(false);
     expect(body.difference).toEqual({ amount: '5.00', currency: 'BRL' });
     expect(body.discrepancies.map((d: Json) => d.code).sort()).toEqual([
@@ -117,12 +117,12 @@ describe('POST /wallets/:walletId/reconciliation', () => {
       }),
     ).toBe(divergencesBefore + 1);
 
-    // nunca altera saldo silenciosamente: continua o valor corrompido, para investigação
+    // never silently alters the balance: keeps the corrupted value, for investigation
     expect((await api.balanceOf(w)).amount).toBe('105.00');
     expect((await reconcile(w.walletId)).body.consistent).toBe(false);
   });
 
-  test('lançamento apagado do meio do ledger: soma, corrente e sequência quebradas', async () => {
+  test('entry deleted from the middle of the ledger: sum, chain, and sequence broken', async () => {
     const w = await walletWithHistory();
     await corrupt(
       'wallet_ledger_entries',
@@ -132,7 +132,7 @@ describe('POST /wallets/:walletId/reconciliation', () => {
 
     const { body } = await reconcile(w.walletId);
     expect(body.consistent).toBe(false);
-    expect(body.calculatedBalance.amount).toBe('130.00'); // o débito de 30 sumiu da soma
+    expect(body.calculatedBalance.amount).toBe('130.00'); // the debit of 30 disappeared from the sum
     expect(body.discrepancies.map((d: Json) => d.code).sort()).toEqual([
       'BALANCE_MISMATCH',
       'LEDGER_CHAIN_BROKEN',
@@ -140,7 +140,7 @@ describe('POST /wallets/:walletId/reconciliation', () => {
     ]);
   });
 
-  test('versão da wallet adiantada em relação ao ledger: VERSION_MISMATCH', async () => {
+  test('wallet version ahead of the ledger: VERSION_MISMATCH', async () => {
     const w = await walletWithHistory();
     await corrupt(
       'wallets',
@@ -153,14 +153,14 @@ describe('POST /wallets/:walletId/reconciliation', () => {
     ]);
   });
 
-  test('404 para wallet inexistente; 400 para id fora do formato', async () => {
+  test('404 for a nonexistent wallet; 400 for an id not in the format', async () => {
     expect((await reconcile(crypto.randomUUID())).status).toBe(404);
     expect((await reconcile('abc')).status).toBe(400);
   });
 });
 
-describe('reconciliação de todas as wallets', () => {
-  test('varre em páginas e devolve só as divergentes; registra o resumo em métrica', async () => {
+describe('reconciliation of all wallets', () => {
+  test('scans in pages and returns only the divergent ones; records the summary in a metric', async () => {
     const healthy = await Promise.all(
       Array.from({ length: 7 }, () => walletWithHistory()),
     );
@@ -171,7 +171,7 @@ describe('reconciliação de todas as wallets', () => {
       [broken.walletId],
     );
 
-    const result = await t.app.get(ReconcileWalletsUseCase).reconcileAll(3); // páginas pequenas: força várias
+    const result = await t.app.get(ReconcileWalletsUseCase).reconcileAll(3); // small pages: forces several
 
     const divergentIds = result.divergent.map((r) => r.walletId);
     expect(divergentIds).toContain(broken.walletId);
@@ -181,7 +181,7 @@ describe('reconciliação de todas as wallets', () => {
       t.db.appUrl,
       `SELECT count(*) AS n FROM wallets`,
     );
-    expect(result.checked).toBe(Number(total!.n)); // nenhuma wallet pulada entre as páginas
+    expect(result.checked).toBe(Number(total!.n)); // no wallet skipped between pages
     expect(metrics.value('wallet_reconciliation_last_run_wallets')).toBe(
       result.checked,
     );
@@ -191,8 +191,8 @@ describe('reconciliação de todas as wallets', () => {
   });
 });
 
-describe('reconciliação sob carga', () => {
-  test('apostas concorrentes nunca produzem falsa divergência (um único snapshot por consulta)', async () => {
+describe('reconciliation under load', () => {
+  test('concurrent bets never produce a false divergence (a single snapshot per query)', async () => {
     const { wallet } = await api.openWallet('1000.00');
     let falsePositives = 0;
     let running = true;

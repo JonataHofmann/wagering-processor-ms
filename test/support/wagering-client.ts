@@ -1,6 +1,6 @@
 /**
- * Cliente HTTP mínimo da API, para os testes de integração e de concorrência.
- * Recebe uma função `request` (uma instância de teste ou, na etapa 13, várias).
+ * Minimal HTTP client for the API, for the integration and concurrency tests.
+ * Takes a `request` function (one test instance or, in step 13, several).
  */
 export type Json = Record<string, any>;
 

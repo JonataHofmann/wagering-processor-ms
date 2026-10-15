@@ -14,7 +14,7 @@ afterAll(async () => {
 });
 
 describe('GET /metrics', () => {
-  test('expõe, em formato Prometheus, as métricas produzidas pelo tráfego normal', async () => {
+  test('exposes, in Prometheus format, the metrics produced by normal traffic', async () => {
     const { wallet } = await api.openWallet('100.00');
     const op = {
       kind: 'BET' as const,
@@ -22,7 +22,7 @@ describe('GET /metrics', () => {
       externalId: crypto.randomUUID(),
     };
     await api.submit(wallet, op); // wagering_transactions_total{status=PROCESSED}
-    await api.submit(wallet, op); // mesma key+payload -> replay: wagering_duplicates_detected_total
+    await api.submit(wallet, op); // same key+payload -> replay: wagering_duplicates_detected_total
     await t.request(`/wallets/${wallet.walletId}/reconciliation`, {
       method: 'POST',
     }); // wallet_reconciliation_checks_total
@@ -33,20 +33,20 @@ describe('GET /metrics', () => {
 
     const text = await response.text();
 
-    // transações por status
+    // transactions by status
     expect(text).toContain('# TYPE wagering_transactions_total counter');
     expect(text).toMatch(/wagering_transactions_total\{[^}]*status="PROCESSED"[^}]*\} \d/);
 
-    // duplicatas detectadas (idempotência)
+    // duplicates detected (idempotency)
     expect(text).toContain('# TYPE wagering_duplicates_detected_total counter');
     expect(text).toMatch(
       /wagering_duplicates_detected_total\{[^}]*source="idempotency_key"[^}]*\} \d/,
     );
 
-    // reconciliação (métrica preexistente, continua funcionando com o snapshot novo)
+    // reconciliation (pre-existing metric, still works with the new snapshot)
     expect(text).toContain('# TYPE wallet_reconciliation_checks_total counter');
 
-    // latência HTTP: histograma com buckets cumulativos até +Inf, soma e contagem
+    // HTTP latency: histogram with cumulative buckets up to +Inf, sum and count
     expect(text).toContain('# TYPE http_request_duration_seconds histogram');
     expect(text).toMatch(/http_request_duration_seconds_bucket\{.*le="\+Inf"\} \d/);
     expect(text).toContain('http_request_duration_seconds_sum');

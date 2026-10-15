@@ -6,20 +6,20 @@ import type {
 import type { OutboxMessage } from '@/src/modules/messaging/domain/entities/outbox-message';
 
 /**
- * Publicador em memória para testar a LÓGICA do relay (reserva, lease, retry) sobre o banco real.
- * A publicação de verdade no SQS é testada separadamente (parte 2).
+ * In-memory publisher to test the relay's LOGIC (reservation, lease, retry) against the real database.
+ * The actual SQS publishing is tested separately (part 2).
  */
 export class RecordingPublisher implements EventPublisher {
-  /** cada publicação, na ordem em que aconteceu (duplicatas incluídas) */
+  /** each publication, in the order it happened (duplicates included) */
   readonly published: Array<{
     id: string;
     payload: Readonly<Record<string, unknown>>;
   }> = [];
-  /** ids que devem falhar na próxima publicação */
+  /** ids that should fail on the next publication */
   failNext = new Set<string>();
-  /** se definido, o publish inteiro lança (broker fora do ar) */
+  /** if set, the whole publish throws (broker is down) */
   outage: string | undefined;
-  /** atraso artificial por chamada, para aumentar a chance de corridas */
+  /** artificial delay per call, to increase the chance of races */
   delayMs = 0;
 
   async publish(messages: readonly OutboxMessage[]): Promise<PublishOutcome[]> {

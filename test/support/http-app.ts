@@ -9,7 +9,7 @@ export interface TestApp {
   app: INestApplication;
   db: IsolatedDatabase;
   baseUrl: string;
-  /** fetch relativo ao servidor de teste, com JSON por padrão */
+  /** fetch relative to the test server, with JSON by default */
   request(
     path: string,
     init?: {
@@ -21,11 +21,11 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-/** Sobe a aplicação Nest real numa porta livre, contra um banco isolado, como wagering_app. */
+/** Starts the real Nest application on a free port, against an isolated database, as wagering_app. */
 
 export async function startTestApp(
   options: Omit<AppOptions, 'databaseUrl'> = {},
-  /** reaproveita um banco isolado já existente, em vez de criar um novo (e não o derruba no close()) */
+  /** reuses an existing isolated database, instead of creating a new one (and doesn't drop it in close()) */
   existingDb?: IsolatedDatabase,
 ): Promise<TestApp> {
   const db = existingDb ?? (await createIsolatedDatabase());

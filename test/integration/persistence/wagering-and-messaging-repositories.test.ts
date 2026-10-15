@@ -62,7 +62,7 @@ function newTransaction(
 }
 
 describe('WagerTransactionRepository', () => {
-  test('ida e volta de uma transação REJECTED, buscando por id, key e id externo', async () => {
+  test('round trip of a REJECTED transaction, looking up by id, key and external id', async () => {
     const loss = newTransaction(Kind.Loss);
     loss.reject(FailureCode.WalletPlayerMismatch, {
       balanceSnapshot: brl('0.00'),
@@ -91,7 +91,7 @@ describe('WagerTransactionRepository', () => {
     }
   });
 
-  test('update grava o ciclo de vida: PENDING_REFERENCE com agenda, depois nova tentativa', async () => {
+  test('update writes the lifecycle: PENDING_REFERENCE with schedule, then a new attempt', async () => {
     const refund = newTransaction(Kind.Refund, {
       reference: newTransaction(Kind.Bet),
     });
@@ -117,7 +117,7 @@ describe('WagerTransactionRepository', () => {
     expect(found.expiresAt?.toISOString()).toBe('2026-01-01T00:15:00.000Z');
   });
 
-  test('a mesma idempotency key gravada duas vezes vira DuplicateWagerTransactionError', async () => {
+  test('the same idempotency key written twice becomes a DuplicateWagerTransactionError', async () => {
     const first = newTransaction(Kind.Loss);
     await p.tm.runInTransaction(() => p.transactions.insert(first));
     const twin = newTransaction(Kind.Loss, {
@@ -128,7 +128,7 @@ describe('WagerTransactionRepository', () => {
     ).rejects.toThrow(DuplicateWagerTransactionError);
   });
 
-  test('o mesmo id externo do provedor também é duplicata', async () => {
+  test('the same provider external id is also a duplicate', async () => {
     const first = newTransaction(Kind.Loss);
     await p.tm.runInTransaction(() => p.transactions.insert(first));
     const twin = newTransaction(Kind.Loss, {
@@ -140,7 +140,7 @@ describe('WagerTransactionRepository', () => {
     ).rejects.toThrow(DuplicateWagerTransactionError);
   });
 
-  test('hasProcessedReversal devolve false quando não há reversão', async () => {
+  test('hasProcessedReversal returns false when there is no reversal', async () => {
     expect(
       await p.tm.runInTransaction(() =>
         p.transactions.hasProcessedReversal(crypto.randomUUID()),
@@ -167,7 +167,7 @@ class TestEvent extends IntegrationEvent<{
 }
 
 describe('InboxRepository', () => {
-  test('a primeira gravação registra; a segunda é reconhecida como duplicata, sem erro', async () => {
+  test('the first write registers; the second is recognized as a duplicate, no error', async () => {
     const message = InboxMessage.receive({
       messageId: 'msg-1',
       consumerName: 'wager-transactions',
@@ -178,14 +178,14 @@ describe('InboxRepository', () => {
       async () =>
         [
           await p.inbox.tryRegister(message),
-          await p.inbox.tryRegister(message), // mesma transação: o ON CONFLICT não aborta nada
+          await p.inbox.tryRegister(message), // same transaction: the ON CONFLICT aborts nothing
         ] as const,
     );
     expect(first).toBe(true);
     expect(second).toBe(false);
   });
 
-  test('markProcessed grava processedAt', async () => {
+  test('markProcessed writes processedAt', async () => {
     const message = InboxMessage.receive({
       messageId: 'msg-2',
       consumerName: 'wager-transactions',
@@ -205,7 +205,7 @@ describe('InboxRepository', () => {
 });
 
 describe('OutboxRepository', () => {
-  test('ida e volta: payload jsonb volta idêntico ao envelope do evento', async () => {
+  test('round trip: jsonb payload comes back identical to the event envelope', async () => {
     const event = TestEvent.of(wallet.id);
     await p.tm.runInTransaction(() =>
       p.outbox.enqueue([OutboxMessage.enqueue(event)]),
@@ -224,8 +224,8 @@ describe('OutboxRepository', () => {
   });
 });
 
-describe('atomicidade entre repositórios', () => {
-  test('transação, inbox e outbox gravados juntos somem juntos num rollback', async () => {
+describe('atomicity across repositories', () => {
+  test('transaction, inbox and outbox written together disappear together on a rollback', async () => {
     const loss = newTransaction(Kind.Loss);
     const inbox = InboxMessage.receive({
       messageId: 'msg-atomic',

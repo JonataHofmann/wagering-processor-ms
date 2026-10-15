@@ -24,19 +24,19 @@ import {
 } from 'bun:test';
 
 let db: IsolatedDatabase;
-// app EM PROCESSO (não um `bun src/main.ts` real): sem `sqs:`, relay/consumer
-// ficam inertes sozinhos — só gera eventos na outbox via HTTP, nunca os publica,
-// nunca disputa com os processos "relay" reais que cada teste sobe abaixo.
+// IN-PROCESS app (not a real `bun src/main.ts`): without `sqs:`, relay/consumer
+// stay inert on their own — it only generates outbox events via HTTP, never publishes
+// them, never competes with the real "relay" processes each test spins up below.
 let apiApp: TestApp;
 let api: ReturnType<typeof walletClient>;
 const cleanup: Array<() => Promise<unknown>> = [];
 
 /**
- * Env de um processo real dedicado ao relay: isola a fila de entrada (o consumer dessa
- * instância roda sempre, sem papel pra desligá-lo) e deixa o scheduler praticamente parado
- * (idleIntervalMs gigante) — sem isso, o scheduler consulta wager_transactions a cada 500 ms
- * em cada processo, disputando conexão/CPU com as duas chamadas HTTP sequenciais de
- * walletWithBet() e alargando a janela em que o relay pode reservar um lote parcial.
+ * Env for a real process dedicated to the relay: isolates the input queue (this instance's
+ * consumer always runs, there's no role to turn it off) and leaves the scheduler practically
+ * stopped (huge idleIntervalMs) — without this, the scheduler queries wager_transactions every
+ * 500ms in each process, competing for connection/CPU with walletWithBet()'s two sequential
+ * HTTP calls and widening the window where the relay can claim a partial batch.
  */
 function relayProcessEnv(
   queues: TestQueues,
@@ -62,8 +62,8 @@ afterAll(async () => {
 }, 60_000);
 
 beforeEach(async () => {
-  // cada teste começa com a outbox vazia: um teste que falhou no meio não deixa
-  // eventos pendentes para os relays do teste seguinte
+  // each test starts with an empty outbox: a test that failed midway doesn't leave
+  // pending events for the next test's relays
   await queryOnce(
     db.appUrl,
     `UPDATE outbox_messages SET published_at = now(), locked_until = NULL, locked_by = NULL WHERE published_at IS NULL`,
@@ -94,14 +94,14 @@ async function outboxOf(walletIds: string[]): Promise<OutboxRow[]> {
   );
 }
 
-/** Cria a wallet e faz uma aposta: 4 eventos commitados na outbox (abertura + aposta). */
+/** Creates the wallet and places a bet: 4 events committed to the outbox (opening + bet). */
 async function walletWithBet(): Promise<TestWallet> {
   const { wallet } = await api.openWallet('100.00');
   await api.submit(wallet, { kind: 'BET', amount: '10.00' });
   return wallet;
 }
 
-/** Ids dos eventos recebidos que pertencem às wallets informadas (ignora qualquer outro). */
+/** Ids of received events that belong to the given wallets (ignores any other). */
 function eventIdsOf(
   events: Array<{ body: Record<string, any> }>,
   walletIds: string[],
@@ -114,17 +114,17 @@ function eventIdsOf(
   );
 }
 
-describe('recuperação do relay', () => {
-  test('commit confirmado, relay morre antes de publicar: outra instância assume e publica', async () => {
+describe('relay recovery', () => {
+  test('confirmed commit, relay dies before publishing: another instance takes over and publishes', async () => {
     const queues: TestQueues = track(await createTestQueues());
 
-    // o relay sobe com a outbox vazia (passa no health check) e fica esperando trabalho.
-    // OUTBOX_IDLE_INTERVAL_MS alto (1.5 s) é proposital: abertura e aposta, em walletWithBet(),
-    // são 2 transações HTTP sequenciais, não uma só — um idle curto deixaria o relay arriscar
-    // pegar o 1º poll bem no meio das duas, reservando só metade do lote (2 de 4 eventos) e
-    // morrendo com o resto órfão (criado só depois, sem ninguém pra reservar). Um idle bem
-    // maior que o tempo das 2 chamadas garante que a 2ª rodada (não a 1ª, que acha a outbox
-    // ainda vazia) sempre encontra o lote inteiro já commitado.
+    // the relay comes up with an empty outbox (passes the health check) and waits for work.
+    // A high OUTBOX_IDLE_INTERVAL_MS (1.5s) is deliberate: opening and betting, in walletWithBet(),
+    // are 2 sequential HTTP transactions, not one — a short idle would let the relay risk
+    // catching the 1st poll right in the middle of the two, claiming only half the batch (2 of 4
+    // events) and dying with the rest orphaned (created only afterward, with no one to claim them).
+    // An idle much longer than the time of the 2 calls guarantees that the 2nd round (not the 1st,
+    // which finds the outbox still empty) always finds the whole batch already committed.
     const doomed = track(
       await startAppProcess(
         db.appUrl,
@@ -135,20 +135,20 @@ describe('recuperação do relay', () => {
       ),
     );
 
-    // 1. o PostgreSQL confirma o commit (eventos na outbox)
+    // 1. PostgreSQL confirms the commit (events in the outbox)
     const w = await walletWithBet();
 
-    // 2. o relay reserva o lote e morre antes de publicar
+    // 2. the relay claims the batch and dies before publishing
     await Promise.race([doomed.exited, Bun.sleep(15_000)]);
     expect(doomed.signalCode()).toBe('SIGKILL');
 
     const reserved = await outboxOf([w.walletId]);
     expect(reserved).toHaveLength(4);
     expect(reserved.every((r) => r.published_at === null)).toBe(true);
-    expect(reserved.every((r) => r.locked_by !== null)).toBe(true); // lote preso no lease do relay morto
-    expect(eventIdsOf(await queues.drainEvents(), [w.walletId]).size).toBe(0); // nada chegou ao broker
+    expect(reserved.every((r) => r.locked_by !== null)).toBe(true); // batch stuck under the dead relay's lease
+    expect(eventIdsOf(await queues.drainEvents(), [w.walletId]).size).toBe(0); // nothing reached the broker
 
-    // 3. outra instância assume quando o lease (2 s) vence, e 4. publica
+    // 3. another instance takes over once the lease (2s) expires, and 4. publishes
     const survivor = track(
       await startAppProcess(db.appUrl, relayProcessEnv(queues)),
     );
@@ -165,7 +165,7 @@ describe('recuperação do relay', () => {
     );
   }, 60_000);
 
-  test('relay morre depois de publicar e antes de marcar: a republicação é segura (mesmo eventId)', async () => {
+  test('relay dies after publishing and before marking: republishing is safe (same eventId)', async () => {
     const queues: TestQueues = track(await createTestQueues());
 
     const doomed = track(
@@ -173,7 +173,7 @@ describe('recuperação do relay', () => {
         db.appUrl,
         relayProcessEnv(queues, {
           FAULT_INJECTION: 'crash-after-publish-before-mark',
-          OUTBOX_IDLE_INTERVAL_MS: '1500', // ver comentário no teste anterior
+          OUTBOX_IDLE_INTERVAL_MS: '1500', // see comment on the previous test
         }),
       ),
     );
@@ -183,7 +183,7 @@ describe('recuperação do relay', () => {
     expect(doomed.signalCode()).toBe('SIGKILL');
     expect(
       (await outboxOf([w.walletId])).every((r) => r.published_at === null),
-    ).toBe(true); // publicou, não marcou
+    ).toBe(true); // published, didn't mark
 
     const survivor = track(
       await startAppProcess(db.appUrl, relayProcessEnv(queues)),
@@ -196,8 +196,8 @@ describe('recuperação do relay', () => {
     );
     await survivor.stop();
 
-    // republicado com o mesmo MessageDeduplicationId (= eventId): o SQS FIFO descarta a cópia,
-    // e, mesmo que não descartasse, o consumidor deduplicaria pelo eventId
+    // republished with the same MessageDeduplicationId (= eventId): SQS FIFO drops the copy,
+    // and even if it didn't, the consumer would deduplicate by eventId
     const events = await queues.drainEvents();
     expect(eventIdsOf(events, [w.walletId])).toEqual(
       new Set((await outboxOf([w.walletId])).map((r) => r.id)),
@@ -207,11 +207,11 @@ describe('recuperação do relay', () => {
     );
   }, 60_000);
 
-  test('3 relays em processos separados: todos os eventos publicados, nenhum perdido', async () => {
+  test('3 relays in separate processes: all events published, none lost', async () => {
     const queues: TestQueues = track(await createTestQueues());
     const wallets = await Promise.all(
       Array.from({ length: 15 }, () => walletWithBet()),
-    ); // 60 eventos
+    ); // 60 events
     const walletIds = wallets.map((w) => w.walletId);
 
     const relays = await Promise.all(

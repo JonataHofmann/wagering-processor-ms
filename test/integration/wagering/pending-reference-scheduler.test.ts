@@ -73,8 +73,8 @@ function message(w: TestWallet, data: Record<string, unknown>) {
   };
 }
 
-describe('scheduler de pendências, ponta a ponta', () => {
-  test('REFUND entregue antes da BET (HTTP): resolvido sozinho quando a BET chega', async () => {
+describe('pending reference scheduler, end to end', () => {
+  test('REFUND delivered before the BET (HTTP): resolved on its own when the BET arrives', async () => {
     const { wallet } = await api.openWallet('100.00');
     const betId = crypto.randomUUID();
 
@@ -101,7 +101,7 @@ describe('scheduler de pendências, ponta a ponta', () => {
     });
   });
 
-  test('ROLLBACK entregue pela fila antes do WIN: os dois processados, na ordem certa de efeitos', async () => {
+  test('ROLLBACK delivered via the queue before the WIN: both processed, in the correct order of effects', async () => {
     const { wallet } = await api.openWallet('10.00');
     const winId = crypto.randomUUID();
     const rollback = message(wallet, {
@@ -128,10 +128,10 @@ describe('scheduler de pendências, ponta a ponta', () => {
     expect(await api.balanceOf(wallet)).toEqual({
       amount: '10.00',
       version: 3,
-    }); // +30 do WIN, -30 do ROLLBACK
+    }); // +30 from the WIN, -30 from the ROLLBACK
   });
 
-  test('referência que nunca chega: REJECTED com REFERENCE_NOT_FOUND depois do prazo, sem chamada manual', async () => {
+  test('reference that never arrives: REJECTED with REFERENCE_NOT_FOUND after the deadline, without manual intervention', async () => {
     const { wallet } = await api.openWallet('100.00');
     const refund = await api.submit(wallet, {
       kind: 'REFUND',

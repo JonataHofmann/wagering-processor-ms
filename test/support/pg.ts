@@ -1,6 +1,6 @@
 import { Client, type Pool, type PoolClient, type QueryResultRow } from 'pg';
 
-/** Executa `fn` numa transação real e faz COMMIT (triggers deferidos disparam no COMMIT). */
+/** Runs `fn` in a real transaction and COMMITs (deferred triggers fire on COMMIT). */
 export async function inTx<T>(
   pool: Pool,
   fn: (client: PoolClient) => Promise<T>,
@@ -20,8 +20,8 @@ export async function inTx<T>(
 }
 
 /**
- * Resolve com o SQLSTATE do erro, ou `undefined` se a operação passou.
- * Permite escrever: expect(await sqlState(op)).toBe('23505').
+ * Resolves with the error's SQLSTATE, or `undefined` if the operation succeeded.
+ * Lets you write: expect(await sqlState(op)).toBe('23505').
  */
 export function sqlState(
   operation: Promise<unknown>,
@@ -32,7 +32,7 @@ export function sqlState(
   );
 }
 
-/** Abre uma conexão avulsa, roda uma query e fecha. */
+/** Opens a standalone connection, runs a query, and closes it. */
 export async function queryOnce<T extends QueryResultRow>(
   url: string,
   sql: string,

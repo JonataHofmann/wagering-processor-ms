@@ -16,8 +16,8 @@ import {
 export interface TestQueues {
   config: SqsConfig;
   client: SQSClient;
-  /** envia uma mensagem para a fila principal, como um provedor faria */
-  /** consome (e apaga) o que chegou na fila de eventos desde a última chamada */
+  /** sends a message to the main queue, as a provider would */
+  /** consumes (and deletes) whatever arrived in the events queue since the last call */
   drainEvents(): Promise<
     Array<{
       body: Record<string, any>;
@@ -30,9 +30,9 @@ export interface TestQueues {
     body: unknown,
     options: { groupId: string; deduplicationId?: string },
   ): Promise<void>;
-  /** mensagens visíveis + em processamento na fila principal */
+  /** messages visible + in flight in the main queue */
   depth(): Promise<number>;
-  /** lê (sem apagar) o que estiver na DLQ */
+  /** reads (without deleting) whatever is in the DLQ */
   deadLetters(): Promise<
     Array<{ body: string; attributes: Record<string, MessageAttributeValue> }>
   >;
@@ -40,8 +40,8 @@ export interface TestQueues {
 }
 
 /**
- * Cria um par de filas FIFO exclusivo da suíte (principal + DLQ com redrive),
- * no LocalStack/MiniStack configurado no .env. Nada é compartilhado com o ambiente de desenvolvimento.
+ * Creates a FIFO queue pair exclusive to the suite (main + DLQ with redrive),
+ * on the LocalStack/MiniStack configured in .env. Nothing is shared with the development environment.
  */
 export async function createTestQueues(
   options: { maxReceiveCount?: number; visibilityTimeoutSeconds?: number } = {},
@@ -138,7 +138,7 @@ export async function createTestQueues(
           QueueUrl: dlq.QueueUrl,
           MaxNumberOfMessages: 10,
           WaitTimeSeconds: 1,
-          VisibilityTimeout: 0, // só olha: continuam disponíveis
+          VisibilityTimeout: 0, // just peeking: messages stay available
           MessageAttributeNames: ['All'],
         }),
       );
@@ -196,7 +196,7 @@ export async function createTestQueues(
   };
 }
 
-/** Espera uma condição ficar verdadeira (polling), ou falha com a mensagem informada. */
+/** Waits for a condition to become true (polling), or fails with the given message. */
 export async function waitFor(
   condition: () => Promise<boolean>,
   description: string,
@@ -232,7 +232,7 @@ export function relayEnv(
 ): Record<string, string> {
   return {
     SQS_EVENTS_QUEUE: queues.config.queues.walletEvents,
-    OUTBOX_LEASE_MS: '2000', // lease curto: o teste não precisa esperar 30 s
+    OUTBOX_LEASE_MS: '2000', // short lease: the test shouldn't have to wait 30s
     OUTBOX_IDLE_INTERVAL_MS: '100',
     ...extra,
   };

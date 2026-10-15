@@ -20,7 +20,7 @@ beforeAll(async () => {
   t = await startTestApp();
   p = await connectPersistence(t.db);
   api = walletClient(t.request);
-  // o MESMO handler que a aplicação usa (caso de uso, transação, inbox, métricas)
+  // the SAME handler the application uses (use case, transaction, inbox, metrics)
   handler = t.app.get(WagerMessageHandler);
   metrics = t.app.get<Metrics>(METRICS);
 });
@@ -35,7 +35,7 @@ async function newWallet(balance: string): Promise<TestWallet> {
   return (await api.openWallet(balance)).wallet;
 }
 
-/** Monta uma mensagem no formato do enunciado. */
+/** Builds a message in the format described in the spec. */
 function message(
   w: TestWallet,
   data: Record<string, unknown> = {},
@@ -81,8 +81,8 @@ async function transactionsWithKey(idempotencyKey: string): Promise<number> {
   return Number(row!.n);
 }
 
-describe('processamento', () => {
-  test('mensagem válida: processa pelo mesmo caso de uso, registra a inbox e manda ack', async () => {
+describe('processing', () => {
+  test('valid message: processed by the same use case, recorded in the inbox and acked', async () => {
     const w = await newWallet('100.00');
     const msg = message(w);
     const disposition = await handler.handle(JSON.stringify(msg));
@@ -96,7 +96,7 @@ describe('processamento', () => {
     expect(await inboxCount(msg.messageId)).toBe(1);
   });
 
-  test('rejeição de negócio é terminal: transação REJECTED gravada e ack (não vai para a DLQ)', async () => {
+  test('business rejection is terminal: REJECTED transaction recorded and acked (does not go to the DLQ)', async () => {
     const w = await newWallet('10.00');
     const disposition = await handler.handle(
       JSON.stringify(
@@ -110,7 +110,7 @@ describe('processamento', () => {
     });
   });
 
-  test('o messageId vira causationId dos eventos', async () => {
+  test('the messageId becomes the causationId of the events', async () => {
     const w = await newWallet('100.00');
     const msg = message(w);
     const disposition = await handler.handle(JSON.stringify(msg));
@@ -127,8 +127,8 @@ describe('processamento', () => {
   });
 });
 
-describe('deduplicação', () => {
-  test('a mesma mensagem reentregue: ack como duplicata, sem segundo efeito', async () => {
+describe('deduplication', () => {
+  test('the same message redelivered: acked as duplicate, no second effect', async () => {
     const w = await newWallet('100.00');
     const raw = JSON.stringify(message(w));
     const before = metrics.value('wagering_duplicates_detected_total', {
@@ -151,7 +151,7 @@ describe('deduplicação', () => {
     ).toBe(before + 1);
   });
 
-  test('reentregas simultâneas da mesma mensagem: um único efeito', async () => {
+  test('concurrent redeliveries of the same message: a single effect', async () => {
     const w = await newWallet('100.00');
     const raw = JSON.stringify(message(w));
     const dispositions = await Promise.all(
@@ -171,7 +171,7 @@ describe('deduplicação', () => {
     expect(await api.balanceOf(w)).toEqual({ amount: '75.00', version: 2 });
   });
 
-  test('mensagens diferentes com a mesma idempotency key: a segunda é replay, ambas registradas na inbox', async () => {
+  test('different messages with the same idempotency key: the second is a replay, both recorded in the inbox', async () => {
     const w = await newWallet('100.00');
     const first = message(w);
     const second = { ...first, messageId: `msg-${crypto.randomUUID()}` };
@@ -189,7 +189,7 @@ describe('deduplicação', () => {
     expect(await inboxCount(second.messageId)).toBe(1);
   });
 
-  test('o mesmo messageId com outro conteúdo: DLQ, nunca tratado como duplicata', async () => {
+  test('the same messageId with different content: DLQ, never treated as duplicate', async () => {
     const w = await newWallet('100.00');
     const original = message(w);
     await handler.handle(JSON.stringify(original));
@@ -206,25 +206,25 @@ describe('deduplicação', () => {
   });
 });
 
-describe('mensagens que nunca vão dar certo vão direto para a DLQ', () => {
+describe('messages that will never succeed go straight to the DLQ', () => {
   test.each([
-    ['JSON malformado', () => '{"messageId": '],
+    ['malformed JSON', () => '{"messageId": '],
     [
-      'type desconhecido',
+      'unknown type',
       (w: TestWallet) => JSON.stringify(message(w, {}, { type: 'Other' })),
     ],
     [
-      'sem messageId',
+      'missing messageId',
       (w: TestWallet) =>
         JSON.stringify({ ...message(w), messageId: undefined }),
     ],
     [
-      'sem idempotencyKey',
+      'missing idempotencyKey',
       (w: TestWallet) =>
         JSON.stringify(message(w, { idempotencyKey: undefined })),
     ],
     [
-      'walletId fora do formato',
+      'walletId with invalid format',
       (w: TestWallet) => JSON.stringify(message(w, { walletId: 'abc' })),
     ],
   ])('%s → INVALID_MESSAGE', async (_, build) => {
@@ -237,24 +237,24 @@ describe('mensagens que nunca vão dar certo vão direto para a DLQ', () => {
 
   test.each([
     [
-      'valor com 3 casas',
+      'value with 3 decimal places',
       { money: { amount: '1.005', currency: 'BRL' } },
       'INVALID_AMOUNT',
     ],
-    ['OPENING submetido pela fila', { kind: 'OPENING' }, 'OPENING_NOT_ALLOWED'],
+    ['OPENING submitted via the queue', { kind: 'OPENING' }, 'OPENING_NOT_ALLOWED'],
     [
-      'wallet inexistente',
+      'nonexistent wallet',
       { walletId: crypto.randomUUID() },
       'WALLET_NOT_FOUND',
     ],
-  ])('%s → DLQ com o código do erro', async (_, data, reason) => {
+  ])('%s → DLQ with the error code', async (_, data, reason) => {
     const w = await newWallet('100.00');
     expect(
       await handler.handle(JSON.stringify(message(w, data))),
     ).toMatchObject({ action: 'dead-letter', reason });
   });
 
-  test('mensagem rejeitada por validação não deixa nada gravado, nem na inbox', async () => {
+  test('message rejected by validation leaves nothing recorded, not even in the inbox', async () => {
     const w = await newWallet('100.00');
     const msg = message(w, { kind: 'OPENING' });
     await handler.handle(JSON.stringify(msg));
@@ -262,8 +262,8 @@ describe('mensagens que nunca vão dar certo vão direto para a DLQ', () => {
   });
 });
 
-describe('falha transitória', () => {
-  test('wallet travada além do lock_timeout → retry, e nada gravado (nem na inbox)', async () => {
+describe('transient failure', () => {
+  test('wallet locked past the lock_timeout → retry, and nothing recorded (not even in the inbox)', async () => {
     const w = await newWallet('100.00');
     const msg = message(w);
 
@@ -290,12 +290,12 @@ describe('falha transitória', () => {
     await holder;
 
     expect(disposition.action).toBe('retry');
-    expect(await inboxCount(msg.messageId)).toBe(0); // a inbox foi desfeita junto com o resto
+    expect(await inboxCount(msg.messageId)).toBe(0); // the inbox was rolled back along with everything else
     expect(
       metrics.value('database_lock_conflicts_total', { sql_state: '55P03' }),
     ).toBe(lockConflictsBefore + 1);
 
-    // a reentrega posterior processa normalmente
+    // the later redelivery processes normally
     expect(await handler.handle(JSON.stringify(msg))).toMatchObject({
       action: 'ack',
       reason: 'processed',

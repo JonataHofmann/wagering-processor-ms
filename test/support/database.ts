@@ -8,7 +8,7 @@ function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value)
     throw new Error(
-      `${name} é obrigatória para testes de integração (confira o .env)`,
+      `${name} is required for integration tests (check the .env)`,
     );
   return value;
 }
@@ -16,14 +16,14 @@ function requireEnv(name: string): string {
 const ADMIN_URL = requireEnv('TEST_DATABASE_ADMIN_URL');
 const APP_URL = requireEnv('TEST_DATABASE_APP_URL');
 
-/** Troca só o nome do banco numa URL de conexão. */
+/** Swaps only the database name in a connection URL. */
 function withDatabase(baseUrl: string, database: string): string {
   const url = new URL(baseUrl);
   url.pathname = `/${database}`;
   return url.toString();
 }
 
-/** Abre uma conexão administrativa, executa algo e fecha. */
+/** Opens an admin connection, runs something, and closes it. */
 async function asAdmin<T>(fn: (client: Client) => Promise<T>): Promise<T> {
   const client = new Client({ connectionString: ADMIN_URL });
   await client.connect();
@@ -34,7 +34,7 @@ async function asAdmin<T>(fn: (client: Client) => Promise<T>): Promise<T> {
   }
 }
 
-/** Roda as migrations num banco específico (sempre como owner). */
+/** Runs the migrations on a specific database (always as owner). */
 export async function runMigrations(
   databaseUrl: string,
   direction: 'up' | 'down-all' = 'up',
@@ -49,14 +49,14 @@ export async function runMigrations(
     if (direction === 'up') await orm.migrator.up();
     else await orm.migrator.down({ to: 0 });
   } finally {
-    // fecha todas as conexões: o Postgres não copia um template com conexões abertas
+    // closes all connections: Postgres won't copy a template that has open connections
     await orm.close(true);
   }
 }
 
 let templateReady: Promise<void> | undefined;
 
-/** Recria e migra o template uma única vez por execução de `bun test`. */
+/** Recreates and migrates the template once per `bun test` run. */
 function ensureTemplate(): Promise<void> {
   templateReady ??= (async () => {
     await asAdmin(async (c) => {
@@ -69,13 +69,13 @@ function ensureTemplate(): Promise<void> {
 }
 
 export interface IsolatedDatabase {
-  /** nome do banco criado (wg_test_...) */
+  /** name of the created database (wg_test_...) */
   readonly name: string;
-  /** conexão como owner: ignora GRANTs, mas não ignora triggers */
+  /** connection as owner: bypasses GRANTs, but not triggers */
   readonly ownerUrl: string;
-  /** conexão como wagering_app: exatamente o que a aplicação usa */
+  /** connection as wagering_app: exactly what the application uses */
   readonly appUrl: string;
-  /** apaga o banco; chame no afterAll */
+  /** drops the database; call it in afterAll */
   drop(): Promise<void>;
 }
 
@@ -101,13 +101,13 @@ async function create(template: string | undefined): Promise<IsolatedDatabase> {
   };
 }
 
-/** Banco já migrado, copiado do template. É o que quase todo teste usa. */
+/** Already-migrated database, copied from the template. What almost every test uses. */
 export async function createIsolatedDatabase(): Promise<IsolatedDatabase> {
   await ensureTemplate();
   return create(TEMPLATE);
 }
 
-/** Banco vazio, sem migrations. Só para testar as próprias migrations. */
+/** Empty database, no migrations. Only for testing the migrations themselves. */
 export function createEmptyDatabase(): Promise<IsolatedDatabase> {
   return create(undefined);
 }

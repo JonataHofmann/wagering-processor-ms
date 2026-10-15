@@ -25,14 +25,14 @@ import {
 } from 'bun:test';
 
 let db: IsolatedDatabase;
-// isola a fila: todo processo real agora roda consumer e relay sempre (sem papel pra
-// desligá-los), e sem isso eles ficariam de olho na fila REAL de desenvolvimento
+// isolates the queue: every real process now always runs consumer and relay (no role
+// to turn them off), and without this they'd be watching the REAL dev queue
 let queues: TestQueues;
-// app EM PROCESSO: cria as pendências e as referências via HTTP, mas nunca as
-// resolve — sem gate natural tipo "SQS ausente" pro scheduler (ele sempre liga),
-// então o idleIntervalMs gigante o deixa inerte depois da 1ª rodada (vazia, no
-// boot, antes de qualquer pendência existir); quem resolve são os processos
-// "scheduler" reais que cada teste sobe abaixo.
+// IN-PROCESS app: creates the pending items and references via HTTP, but never
+// resolves them — there's no natural gate like "SQS absent" for the scheduler (it
+// always turns on), so the huge idleIntervalMs leaves it inert after the 1st round
+// (empty, at boot, before any pending item exists); the real "scheduler" processes
+// each test spins up below are the ones that resolve them.
 let apiApp: TestApp;
 let api: ReturnType<typeof walletClient>;
 const cleanup: Array<() => Promise<unknown>> = [];
@@ -59,7 +59,7 @@ afterAll(async () => {
 }, 60_000);
 
 beforeEach(async () => {
-  // pendências que sobraram de um teste anterior não podem derrubar o scheduler do teste seguinte
+  // pending items left over from a previous test can't take down the next test's scheduler
   await queryOnce(
     db.appUrl,
     `UPDATE wager_transactions SET next_attempt_at = now() + interval '1 hour' WHERE status = 'PENDING_REFERENCE'`,
@@ -85,7 +85,7 @@ async function statusOf(
   return row!;
 }
 
-/** Wallet com um REFUND pendente; devolve o id externo da BET que ele espera. */
+/** Wallet with a pending REFUND; returns the external id of the BET it's waiting on. */
 async function pendingRefund(w: TestWallet, amount = '10.00') {
   const betId = crypto.randomUUID();
   const refund = await api.submit(w, {
@@ -97,9 +97,9 @@ async function pendingRefund(w: TestWallet, amount = '10.00') {
   return { refundId: refund.body.transactionId as string, betId };
 }
 
-describe('recuperação do scheduler', () => {
-  test('scheduler morto depois de reservar: outra instância resolve quando a reserva vence', async () => {
-    // regra da etapa 15: o processo com falha sobe ANTES de existir o trabalho que o derruba
+describe('scheduler recovery', () => {
+  test('scheduler killed after claiming: another instance resolves once the claim expires', async () => {
+    // step 15 rule: the process with the fault injection comes up BEFORE the work that kills it exists
     const doomed = track(
       await startAppProcess(db.appUrl, {
         ...consumerEnv(queues),
@@ -116,12 +116,12 @@ describe('recuperação do scheduler', () => {
       kind: 'BET',
       amount: '40.00',
       externalId: betId,
-    }); // atalho: a pendência vence agora
+    }); // shortcut: the pending item is due now
 
     await Promise.race([doomed.exited, Bun.sleep(15_000)]);
     expect(doomed.signalCode()).toBe('SIGKILL');
 
-    // reservada pelo processo morto: ainda pendente, com a reserva valendo
+    // claimed by the dead process: still pending, with the claim still valid
     const reserved = await statusOf(refundId);
     expect(reserved.status).toBe('PENDING_REFERENCE');
     expect(reserved.next_attempt_at!.getTime()).toBeGreaterThan(Date.now());
@@ -146,7 +146,7 @@ describe('recuperação do scheduler', () => {
     });
   }, 60_000);
 
-  test('3 schedulers em processos separados: 30 pendências, cada uma resolvida exatamente uma vez', async () => {
+  test('3 schedulers in separate processes: 30 pending items, each resolved exactly once', async () => {
     const schedulers = await Promise.all(
       Array.from({ length: 3 }, () =>
         startAppProcess(db.appUrl, {
@@ -158,7 +158,7 @@ describe('recuperação do scheduler', () => {
     );
     schedulers.forEach(track);
 
-    // 10 wallets com 3 REFUNDs pendentes cada (pendências da mesma wallet disputam o mesmo lock)
+    // 10 wallets with 3 pending REFUNDs each (pending items on the same wallet compete for the same lock)
     const wallets = await Promise.all(
       Array.from(
         { length: 10 },
@@ -176,7 +176,7 @@ describe('recuperação do scheduler', () => {
       )
     ).flat();
 
-    // as BETs chegam todas de uma vez: 30 pendências vencem juntas
+    // the BETs all arrive at once: 30 pending items come due together
     await Promise.all(
       pendings.map((p) =>
         api.submit(p.wallet, {
@@ -201,7 +201,7 @@ describe('recuperação do scheduler', () => {
     );
     await Promise.all(schedulers.map((s) => s.stop()));
 
-    // cada REFUND creditou uma única vez: 100 - 3×10 (BETs) + 3×10 (REFUNDs) = 100
+    // each REFUND credited exactly once: 100 - 3×10 (BETs) + 3×10 (REFUNDs) = 100
     for (const w of wallets) {
       expect(await api.balanceOf(w)).toEqual({ amount: '100.00', version: 7 });
     }

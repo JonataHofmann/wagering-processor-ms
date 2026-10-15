@@ -20,37 +20,37 @@ const BET_PAYLOAD = {
 };
 
 describe('canonicalize (RFC 8785)', () => {
-  test('ordena as chaves e remove espaços', () => {
+  test('sorts keys and removes spaces', () => {
     expect(canonicalize({ b: 2, a: 1 })).toBe('{"a":1,"b":2}');
   });
 
-  test('ordena também objetos aninhados', () => {
+  test('also sorts nested objects', () => {
     expect(canonicalize({ z: { y: 1, x: 2 }, a: [] })).toBe(
       '{"a":[],"z":{"x":2,"y":1}}',
     );
   });
 
-  test('preserva a ordem dos arrays', () => {
+  test('preserves array order', () => {
     expect(canonicalize([3, 1, 2])).toBe('[3,1,2]');
   });
 
-  test('serializa null, booleanos e strings com escape', () => {
+  test('serializes null, booleans and strings with escaping', () => {
     expect(canonicalize({ n: null, t: true, f: false, s: 'a"b\\c\n' })).toBe(
       '{"f":false,"n":null,"s":"a\\"b\\\\c\\n","t":true}',
     );
   });
 
-  test('preserva caracteres Unicode', () => {
+  test('preserves Unicode characters', () => {
     expect(canonicalize({ jogo: 'Tigrinho 🐯 ação' })).toBe(
       '{"jogo":"Tigrinho 🐯 ação"}',
     );
   });
 
-  test('omite propriedades undefined, como o JSON.stringify', () => {
+  test('omits undefined properties, like JSON.stringify', () => {
     expect(canonicalize({ a: 1, ref: undefined })).toBe(canonicalize({ a: 1 }));
   });
 
-  test('o payload de exemplo do enunciado tem a forma canônica esperada', () => {
+  test('the example payload from the spec has the expected canonical form', () => {
     expect(canonicalize(BET_PAYLOAD)).toBe(
       '{"externalTransactionId":"transaction-123","gameId":"fortune-chimp","kind":"BET",' +
         '"money":{"amount":"25.00","currency":"BRL"},' +
@@ -63,7 +63,7 @@ describe('canonicalize (RFC 8785)', () => {
     ['NaN', NaN],
     ['Infinity', Infinity],
     ['-Infinity', -Infinity],
-  ])('rejeita número não finito (%s)', (_, value) => {
+  ])('rejects non-finite number (%s)', (_, value) => {
     expect(() => canonicalize({ value })).toThrow(CanonicalizationError);
   });
 
@@ -71,35 +71,35 @@ describe('canonicalize (RFC 8785)', () => {
     ['Date', new Date('2026-01-01T00:00:00Z')],
     ['Money', Money.from({ amount: '1.00', currency: 'BRL' })],
     ['Map', new Map()],
-  ])('rejeita objeto que não é JSON puro (%s)', (_, value) => {
+  ])('rejects object that is not pure JSON (%s)', (_, value) => {
     expect(() => canonicalize({ value })).toThrow(CanonicalizationError);
   });
 
-  test('rejeita funções', () => {
+  test('rejects functions', () => {
     expect(() => canonicalize({ fn: () => 1 })).toThrow(CanonicalizationError);
   });
 });
 
 describe('canonicalHash', () => {
-  test('SHA-256 de string vazia bate com o vetor conhecido', () => {
+  test('SHA-256 of empty string matches the known vector', () => {
     expect(sha256Hex('')).toBe(
       'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     );
   });
 
-  test('hash do payload de exemplo bate com o valor calculado de forma independente', () => {
+  test('hash of the example payload matches the independently calculated value', () => {
     expect(canonicalHash(BET_PAYLOAD)).toBe(
       '629836932b79106b99523d06a1e7fa80689b0ea1e1c47aa3f0a5a2c87d0c4344',
     );
   });
 
-  test('outro vetor: objeto com array, booleano e null', () => {
+  test('another vector: object with array, boolean and null', () => {
     expect(canonicalHash({ b: [true, null, 'x'], a: 1 })).toBe(
       'eca8cfb31ab74533e1eb2f4c74d2d55dfe3c79ac704787e54be8647ea7777eb1',
     );
   });
 
-  test('a ordem das chaves não muda o hash', () => {
+  test('the order of keys does not change the hash', () => {
     const reordered = {
       money: { currency: 'BRL', amount: '25.00' },
       kind: 'BET',
@@ -113,7 +113,7 @@ describe('canonicalHash', () => {
     expect(canonicalHash(reordered)).toBe(canonicalHash(BET_PAYLOAD));
   });
 
-  test('qualquer mudança de conteúdo muda o hash', () => {
+  test('any change in content changes the hash', () => {
     const changed = {
       ...BET_PAYLOAD,
       money: { amount: '25.01', currency: 'BRL' },
@@ -121,7 +121,7 @@ describe('canonicalHash', () => {
     expect(canonicalHash(changed)).not.toBe(canonicalHash(BET_PAYLOAD));
   });
 
-  test('o hash tem o formato exigido pelo banco', () => {
+  test('the hash has the format required by the database', () => {
     expect(canonicalHash(BET_PAYLOAD)).toMatch(/^[0-9a-f]{64}$/);
   });
 });

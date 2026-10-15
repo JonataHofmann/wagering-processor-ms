@@ -2,35 +2,35 @@ import { authConfigFromEnv } from '@/src/platform/auth/auth.config';
 import { describe, expect, test } from 'bun:test';
 
 describe('authConfigFromEnv', () => {
-  test('AUTH_MODE=noop em development: ok', () => {
+  test('AUTH_MODE=noop in development: ok', () => {
     expect(
       authConfigFromEnv({ AUTH_MODE: 'noop', NODE_ENV: 'development' }),
     ).toEqual({ mode: 'noop' });
   });
 
-  test('AUTH_MODE=noop em test: ok', () => {
+  test('AUTH_MODE=noop in test: ok', () => {
     expect(authConfigFromEnv({ AUTH_MODE: 'noop', NODE_ENV: 'test' })).toEqual({
       mode: 'noop',
     });
   });
 
-  test('AUTH_MODE ausente: falha (sem fallback implícito)', () => {
+  test('AUTH_MODE missing: fails (no implicit fallback)', () => {
     expect(() => authConfigFromEnv({})).toThrow(/AUTH_MODE must be set/);
   });
 
-  test('AUTH_MODE=noop em produção: falha', () => {
+  test('AUTH_MODE=noop in production: fails', () => {
     expect(() =>
       authConfigFromEnv({ AUTH_MODE: 'noop', NODE_ENV: 'production' }),
     ).toThrow(/not allowed when NODE_ENV="production"/);
   });
 
-  test('AUTH_MODE=keycloak: falha com mensagem explicando que não está implementado', () => {
+  test('AUTH_MODE=keycloak: fails with a message explaining it is not implemented', () => {
     expect(() =>
       authConfigFromEnv({ AUTH_MODE: 'keycloak', NODE_ENV: 'development' }),
     ).toThrow(/not implemented yet/);
   });
 
-  test('AUTH_MODE desconhecido: falha', () => {
+  test('unknown AUTH_MODE: fails', () => {
     expect(() =>
       authConfigFromEnv({ AUTH_MODE: 'basic', NODE_ENV: 'development' }),
     ).toThrow(/unsupported AUTH_MODE/);

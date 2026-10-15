@@ -32,7 +32,7 @@ function openWallet(initial: string) {
   });
 }
 
-/** Executa um movimento com ids e hora novos; o relógio anda 1 s a cada chamada. */
+/** Executes a movement with new ids and time; the clock advances 1s on each call. */
 function move(
   wallet: Wallet,
   operation: 'debit' | 'credit',
@@ -55,7 +55,7 @@ function snapshot(wallet: Wallet) {
   };
 }
 
-/** Saldo reconstruído somando os lançamentos (a invariante central do enunciado). */
+/** Balance reconstructed by summing the entries (the spec's central invariant). */
 function replay(entries: WalletLedgerEntry[]): Money {
   return entries.reduce(
     (total, entry) => total.add(entry.signedMoney()),
@@ -63,17 +63,17 @@ function replay(entries: WalletLedgerEntry[]): Money {
   );
 }
 
-// ================================================================ abertura
+// ================================================================ opening
 
 describe('Wallet.open', () => {
-  test('saldo zero: versão 1, sem lançamento', () => {
+  test('zero balance: version 1, no entry', () => {
     const { wallet, openingEntry } = openWallet('0.00');
     expect(wallet.version).toBe(1);
     expect(wallet.balance.amount).toBe('0.00');
     expect(openingEntry).toBeUndefined();
   });
 
-  test('saldo inicial: lançamento OPENING CREDIT v1 de 0 até o saldo', () => {
+  test('initial balance: OPENING CREDIT entry v1 from 0 to the balance', () => {
     const { wallet, openingEntry } = openWallet('100.00');
     expect(wallet.version).toBe(1);
     expect(wallet.balance.amount).toBe('100.00');
@@ -88,14 +88,14 @@ describe('Wallet.open', () => {
     expect(openingEntry?.balanceAfter.amount).toBe('100.00');
   });
 
-  test('moeda e datas vêm da abertura', () => {
+  test('currency and dates come from the opening', () => {
     const { wallet } = openWallet('10.00');
     expect(wallet.currency).toBe('BRL');
     expect(wallet.createdAt.toISOString()).toBe('2026-01-01T00:00:00.000Z');
     expect(wallet.updatedAt.toISOString()).toBe('2026-01-01T00:00:00.000Z');
   });
 
-  test('saldo inicial negativo é bug', () => {
+  test('negative initial balance is a bug', () => {
     expect(() =>
       Wallet.open({
         id: 'w',
@@ -109,10 +109,10 @@ describe('Wallet.open', () => {
   });
 });
 
-// ================================================== critério 1: sempre devolve lançamento
+// ================================================== criterion 1: always returns the entry
 
-describe('debit e credit sempre devolvem o lançamento', () => {
-  test('debit devolve o lançamento que descreve exatamente a mudança', () => {
+describe('debit and credit always return the entry', () => {
+  test('debit returns the entry that exactly describes the change', () => {
     const { wallet } = openWallet('100.00');
     const entry = move(wallet, 'debit', brl('30.00'));
 
@@ -126,7 +126,7 @@ describe('debit e credit sempre devolvem o lançamento', () => {
     expect(entry.createdAt.getTime()).toBe(wallet.updatedAt.getTime());
   });
 
-  test('credit devolve o lançamento que descreve exatamente a mudança', () => {
+  test('credit returns the entry that exactly describes the change', () => {
     const { wallet } = openWallet('100.00');
     const entry = move(wallet, 'credit', brl('50.00'));
 
@@ -137,25 +137,25 @@ describe('debit e credit sempre devolvem o lançamento', () => {
     expect(entry.walletVersion).toBe(wallet.version);
   });
 
-  test('em qualquer sequência, o ledger reconstrói o saldo e forma uma cadeia sem buracos', () => {
+  test('in any sequence, the ledger reconstructs the balance and forms a chain with no gaps', () => {
     const { wallet, openingEntry } = openWallet('100.00');
     const entries: WalletLedgerEntry[] = [openingEntry!];
 
     entries.push(move(wallet, 'debit', brl('30.00')));
     entries.push(move(wallet, 'credit', brl('50.00')));
-    entries.push(move(wallet, 'debit', brl('120.00'))); // zera
+    entries.push(move(wallet, 'debit', brl('120.00'))); // zeroes out
     entries.push(move(wallet, 'credit', brl('0.01')));
     entries.push(move(wallet, 'credit', brl('999.99')));
     entries.push(move(wallet, 'debit', brl('500.00')));
 
-    // invariante do enunciado: wallet.balance == saldo reconstruído pelo ledger
+    // spec invariant: wallet.balance == balance reconstructed by the ledger
     expect(replay(entries).equals(wallet.balance)).toBe(true);
 
-    // versões consecutivas, 1..n, e a última é a versão da wallet
+    // consecutive versions, 1..n, and the last one is the wallet's version
     expect(entries.map((e) => e.walletVersion)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(wallet.version).toBe(7);
 
-    // cada lançamento começa onde o anterior terminou
+    // each entry starts where the previous one ended
     for (let i = 1; i < entries.length; i++) {
       expect(
         entries[i]!.balanceBefore.equals(entries[i - 1]!.balanceAfter),
@@ -165,10 +165,10 @@ describe('debit e credit sempre devolvem o lançamento', () => {
   });
 });
 
-// ======================================================= critério 2: nunca negativo
+// ======================================================= criterion 2: never negative
 
-describe('o saldo nunca fica negativo', () => {
-  test('débito maior que o saldo é rejeitado e não altera nada', () => {
+describe('the balance never goes negative', () => {
+  test('a debit larger than the balance is rejected and changes nothing', () => {
     const { wallet } = openWallet('50.00');
     const before = snapshot(wallet);
 
@@ -178,31 +178,31 @@ describe('o saldo nunca fica negativo', () => {
     expect(snapshot(wallet)).toEqual(before);
   });
 
-  test('a rejeição é um DomainError com code INSUFFICIENT_FUNDS', () => {
+  test('the rejection is a DomainError with code INSUFFICIENT_FUNDS', () => {
     const { wallet } = openWallet('10.00');
     try {
       move(wallet, 'debit', brl('20.00'));
-      throw new Error('deveria ter lançado');
+      throw new Error('should have thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(DomainError);
       expect((error as DomainError).code).toBe('INSUFFICIENT_FUNDS');
     }
   });
 
-  test('débito do saldo exato zera a wallet', () => {
+  test('debiting the exact balance zeroes out the wallet', () => {
     const { wallet } = openWallet('50.00');
     move(wallet, 'debit', brl('50.00'));
     expect(wallet.balance.isZero()).toBe(true);
   });
 
-  test('wallet com saldo zero não aceita nem um centavo de débito', () => {
+  test('a wallet with zero balance does not accept even a single cent of debit', () => {
     const { wallet } = openWallet('0.00');
     expect(() => move(wallet, 'debit', brl('0.01'))).toThrow(
       InsufficientFundsError,
     );
   });
 
-  test('canDebit responde sem alterar a wallet', () => {
+  test('canDebit answers without altering the wallet', () => {
     const { wallet } = openWallet('50.00');
     const before = snapshot(wallet);
     expect(wallet.canDebit(brl('50.00'))).toBe(true);
@@ -210,7 +210,7 @@ describe('o saldo nunca fica negativo', () => {
     expect(snapshot(wallet)).toEqual(before);
   });
 
-  test('cenário do enunciado em sequência: 100.00, duas apostas de 80.00', () => {
+  test('spec scenario in sequence: 100.00, two bets of 80.00', () => {
     const { wallet, openingEntry } = openWallet('100.00');
     const entries: WalletLedgerEntry[] = [openingEntry!];
 
@@ -227,10 +227,10 @@ describe('o saldo nunca fica negativo', () => {
   });
 });
 
-// ================================================ critério 3: version só com mudança de saldo
+// ================================================ criterion 3: version only on balance change
 
-describe('version só incrementa quando o saldo muda', () => {
-  test('cada movimento bem-sucedido incrementa exatamente 1', () => {
+describe('version only increments when the balance changes', () => {
+  test('each successful movement increments exactly 1', () => {
     const { wallet } = openWallet('100.00');
     move(wallet, 'debit', brl('10.00'));
     expect(wallet.version).toBe(2);
@@ -239,13 +239,13 @@ describe('version só incrementa quando o saldo muda', () => {
   });
 
   test.each([
-    ['saldo insuficiente', () => brl('1000.00'), 'debit' as const],
-    ['moeda diferente no débito', () => usd('1.00'), 'debit' as const],
-    ['moeda diferente no crédito', () => usd('1.00'), 'credit' as const],
-    ['valor zero no débito', () => brl('0.00'), 'debit' as const],
-    ['valor zero no crédito', () => brl('0.00'), 'credit' as const],
+    ['insufficient balance', () => brl('1000.00'), 'debit' as const],
+    ['different currency on debit', () => usd('1.00'), 'debit' as const],
+    ['different currency on credit', () => usd('1.00'), 'credit' as const],
+    ['zero amount on debit', () => brl('0.00'), 'debit' as const],
+    ['zero amount on credit', () => brl('0.00'), 'credit' as const],
   ])(
-    'operação recusada (%s) não altera version, saldo nem data',
+    'rejected operation (%s) does not change version, balance or date',
     (_, money, operation) => {
       const { wallet } = openWallet('100.00');
       const before = snapshot(wallet);
@@ -254,7 +254,7 @@ describe('version só incrementa quando o saldo muda', () => {
     },
   );
 
-  test('consultas não alteram version', () => {
+  test('queries do not change version', () => {
     const { wallet } = openWallet('100.00');
     wallet.canDebit(brl('10.00'));
     void wallet.balance;
@@ -262,10 +262,10 @@ describe('version só incrementa quando o saldo muda', () => {
   });
 });
 
-// ================================================================ erros
+// ================================================================ errors
 
-describe('tipos de erro', () => {
-  test('moeda diferente é erro de negócio (CURRENCY_MISMATCH)', () => {
+describe('error types', () => {
+  test('different currency is a business error (CURRENCY_MISMATCH)', () => {
     const { wallet } = openWallet('100.00');
     expect(() => move(wallet, 'credit', usd('1.00'))).toThrow(
       CurrencyMismatchError,
@@ -273,7 +273,7 @@ describe('tipos de erro', () => {
     expect(() => wallet.canDebit(usd('1.00'))).toThrow(CurrencyMismatchError);
   });
 
-  test('movimento de valor zero é bug, não rejeição de negócio', () => {
+  test('zero-amount movement is a bug, not a business rejection', () => {
     const { wallet } = openWallet('100.00');
     expect(() => move(wallet, 'credit', brl('0.00'))).toThrow(
       InvariantViolationError,
@@ -284,7 +284,7 @@ describe('tipos de erro', () => {
 // ================================================================ rehydrate
 
 describe('Wallet.rehydrate', () => {
-  test('restaura o estado sem revalidar e continua a numeração de versões', () => {
+  test('restores state without revalidating and continues the version numbering', () => {
     const wallet = Wallet.rehydrate({
       id: 'wallet-9',
       playerId: 'player-9',

@@ -20,7 +20,7 @@ function capture(level = parseLogLevel('debug')) {
 }
 
 describe('JsonLogger', () => {
-  test('uma linha JSON por evento, com nível, contexto e mensagem', () => {
+  test('one JSON line per event, with level, context and message', () => {
     const { logger, lines } = capture();
     logger.log('started', 'Bootstrap');
 
@@ -34,7 +34,7 @@ describe('JsonLogger', () => {
     expect(Number.isNaN(Date.parse(lines[0]!.time))).toBe(false);
   });
 
-  test('mensagem objeto vira campos de primeiro nível (log estruturado)', () => {
+  test('object message becomes top-level fields (structured log)', () => {
     const { logger, lines } = capture();
     logger.warn({ event: 'sqs_message_retry', delaySeconds: 2 }, 'SqsConsumer');
     expect(lines[0]).toMatchObject({
@@ -45,7 +45,7 @@ describe('JsonLogger', () => {
     });
   });
 
-  test('os campos do contexto entram em todas as linhas, inclusive os acrescentados depois', () => {
+  test('context fields appear in every line, including ones added later', () => {
     const { logger, lines } = capture();
     runWithLogContext({ correlationId: 'corr-1', requestId: 'req-1' }, () => {
       logger.log('antes');
@@ -66,7 +66,7 @@ describe('JsonLogger', () => {
     expect(lines[2]!.correlationId).toBeUndefined();
   });
 
-  test('contextos aninhados herdam os campos do contexto de fora', () => {
+  test('nested contexts inherit the fields from the outer context', () => {
     const { logger, lines } = capture();
     runWithLogContext({ sqsMessageId: 'sqs-1' }, () =>
       runWithLogContext({ job: 'x' }, () => logger.log('dentro')),
@@ -74,7 +74,7 @@ describe('JsonLogger', () => {
     expect(lines[0]).toMatchObject({ sqsMessageId: 'sqs-1', job: 'x' });
   });
 
-  test('erros carregam nome, mensagem e stack', () => {
+  test('errors carry name, message and stack', () => {
     const { logger, lines } = capture();
     logger.error(new Error('boom'), 'X');
     expect(lines[0]).toMatchObject({
@@ -85,7 +85,7 @@ describe('JsonLogger', () => {
     expect(lines[0]!.err.stack).toContain('boom');
   });
 
-  test('respeita o nível configurado', () => {
+  test('respects the configured level', () => {
     const { logger, lines } = capture(parseLogLevel('warn'));
     logger.log('info some');
     logger.debug('debug some');
@@ -94,14 +94,14 @@ describe('JsonLogger', () => {
     expect(lines.map((l) => l.level)).toEqual(['warn', 'error']);
   });
 
-  test('aceita os nomes usuais de nível e recusa os inválidos', () => {
+  test('accepts the usual level names and rejects invalid ones', () => {
     expect(parseLogLevel('info')).toBe('log');
     expect(parseLogLevel('trace')).toBe('verbose');
     expect(parseLogLevel(undefined)).toBe('log');
     expect(() => parseLogLevel('loud')).toThrow('invalid LOG_LEVEL');
   });
 
-  test('funciona como logger do Nest: new Logger(contexto) delega para ele', () => {
+  test('works as the Nest logger: new Logger(context) delegates to it', () => {
     const { logger, lines } = capture();
     Logger.overrideLogger(logger);
     try {

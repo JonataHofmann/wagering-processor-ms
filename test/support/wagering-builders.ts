@@ -15,7 +15,7 @@ export const T0 = new Date('2026-01-01T00:00:00.000Z');
 
 let counter = 0;
 
-/** Transação válida com padrões; por padrão, uma BET de 10.00 BRL. */
+/** Valid transaction with defaults; by default, a BET of 10.00 BRL. */
 export function buildTransaction(
   overrides: Partial<CreateWagerTransactionProps> = {},
 ): WagerTransaction {
@@ -39,7 +39,7 @@ export function buildTransaction(
   });
 }
 
-/** Transação que referencia outra, com mesmo valor e contexto por padrão. */
+/** Transaction that references another, with the same amount and context by default. */
 export function buildReferencing(
   kind: Kind.Win | Kind.Refund | Kind.Rollback,
   reference: WagerTransaction,
@@ -53,7 +53,7 @@ export function buildReferencing(
   });
 }
 
-/** Marca como PROCESSED (resolvendo a referência quando houver). */
+/** Marks as PROCESSED (resolving the reference when there is one). */
 export function processed(
   tx: WagerTransaction,
   reference?: WagerTransaction,

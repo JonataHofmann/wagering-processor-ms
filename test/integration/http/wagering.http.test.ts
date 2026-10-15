@@ -9,7 +9,7 @@ beforeAll(async () => {
   t = await startTestApp();
 });
 afterAll(async () => {
-  // invariante final de toda a suíte: nenhum saldo diverge do ledger
+  // final invariant for the whole suite: no balance diverges from the ledger
   if (t) expect(await walletsInconsistentWithLedger(t.db.appUrl)).toEqual([]);
   await t?.close();
 });
@@ -112,7 +112,7 @@ async function eventsOf(transactionId: string): Promise<string[]> {
 // ================================================================== BET
 
 describe('BET', () => {
-  test('200 PROCESSED, debita e devolve o saldo no formato do enunciado', async () => {
+  test('200 PROCESSED, debits and returns the balance in the format described in the spec', async () => {
     const w = await openWallet('1000.00');
     const { status, body } = await submit(w, { kind: 'BET', amount: '25.00' });
 
@@ -130,7 +130,7 @@ describe('BET', () => {
     ]);
   });
 
-  test('422 REJECTED com INSUFFICIENT_FUNDS, sem mexer no saldo nem no ledger', async () => {
+  test('422 REJECTED with INSUFFICIENT_FUNDS, without touching the balance or the ledger', async () => {
     const w = await openWallet('10.00');
     const { status, body } = await submit(w, { kind: 'BET', amount: '10.01' });
 
@@ -141,17 +141,17 @@ describe('BET', () => {
       balance: { amount: '10.00' },
     });
     expect(await balanceOf(w)).toEqual({ amount: '10.00', version: 1 });
-    expect(await ledgerCount(w)).toBe(1); // só o OPENING
+    expect(await ledgerCount(w)).toBe(1); // only the OPENING
     expect(await eventsOf(body.transactionId)).toEqual([
       'WagerTransactionRejected',
     ]);
   });
 });
 
-// ================================================================== idempotência
+// ================================================================== idempotency
 
-describe('idempotência', () => {
-  test('requisição idêntica: mesma resposta, idempotentReplay true, saldo observado naquele momento', async () => {
+describe('idempotency', () => {
+  test('identical request: same response, idempotentReplay true, balance observed at that moment', async () => {
     const w = await openWallet('100.00');
     const op = {
       kind: 'BET',
@@ -160,16 +160,16 @@ describe('idempotência', () => {
     };
 
     const first = await submit(w, op);
-    await submit(w, { kind: 'BET', amount: '10.00' }); // o saldo muda depois
+    await submit(w, { kind: 'BET', amount: '10.00' }); // the balance changes afterward
     const replay = await submit(w, op);
 
     expect(replay.status).toBe(200);
     expect(replay.body).toEqual({ ...first.body, idempotentReplay: true });
-    expect(replay.body.balance.amount).toBe('70.00'); // o saldo da época, não o atual (60.00)
+    expect(replay.body.balance.amount).toBe('70.00'); // the balance at that time, not the current one (60.00)
     expect(await balanceOf(w)).toEqual({ amount: '60.00', version: 3 });
   });
 
-  test('replay de uma rejeição devolve a mesma rejeição', async () => {
+  test('replay of a rejection returns the same rejection', async () => {
     const w = await openWallet('5.00');
     const op = {
       kind: 'BET',
@@ -183,7 +183,7 @@ describe('idempotência', () => {
     expect(replay.body).toEqual({ ...first.body, idempotentReplay: true });
   });
 
-  test('mesma key com payload diferente: 409, nunca replay', async () => {
+  test('same key with different payload: 409, never replay', async () => {
     const w = await openWallet('100.00');
     const externalId = crypto.randomUUID();
     await submit(w, { kind: 'BET', amount: '10.00', externalId });
@@ -198,7 +198,7 @@ describe('idempotência', () => {
     expect(await balanceOf(w)).toEqual({ amount: '90.00', version: 2 });
   });
 
-  test('"25" e "25.00" são o mesmo payload (valor normalizado no hash)', async () => {
+  test('"25" and "25.00" are the same payload (value normalized in the hash)', async () => {
     const w = await openWallet('100.00');
     const externalId = crypto.randomUUID();
     await submit(w, { kind: 'BET', amount: '25.00', externalId });
@@ -207,7 +207,7 @@ describe('idempotência', () => {
     expect(replay.body.idempotentReplay).toBe(true);
   });
 
-  test('400 sem o header Idempotency-Key', async () => {
+  test('400 without the Idempotency-Key header', async () => {
     const w = await openWallet('100.00');
     const { body } = payload(w, { kind: 'BET', amount: '1.00' });
     const response = await t.request('/wagering/transactions', {
@@ -218,10 +218,10 @@ describe('idempotência', () => {
   });
 });
 
-// ================================================================== WIN e LOSS
+// ================================================================== WIN and LOSS
 
-describe('WIN e LOSS', () => {
-  test('WIN credita, com ou sem referência à BET', async () => {
+describe('WIN and LOSS', () => {
+  test('WIN credits, with or without reference to BET', async () => {
     const w = await openWallet('100.00');
     const bet = await submit(w, { kind: 'BET', amount: '10.00' });
     const winWithRef = await submit(w, {
@@ -236,7 +236,7 @@ describe('WIN e LOSS', () => {
     expect(await balanceOf(w)).toEqual({ amount: '145.00', version: 4 });
   });
 
-  test('LOSS registra o resultado sem mover saldo, sem lançamento, mas com evento', async () => {
+  test('LOSS records the result without moving the balance, without a ledger entry, but with an event', async () => {
     const w = await openWallet('100.00');
     const { status, body } = await submit(w, { kind: 'LOSS', amount: '10.00' });
 
@@ -250,10 +250,10 @@ describe('WIN e LOSS', () => {
   });
 });
 
-// ================================================================== REFUND e ROLLBACK
+// ================================================================== REFUND and ROLLBACK
 
-describe('REFUND e ROLLBACK', () => {
-  test('REFUND devolve a BET; um segundo REFUND da mesma BET é rejeitado', async () => {
+describe('REFUND and ROLLBACK', () => {
+  test('REFUND returns the BET; a second REFUND of the same BET is rejected', async () => {
     const w = await openWallet('100.00');
     const bet = await submit(w, { kind: 'BET', amount: '40.00' });
     const refund = await submit(w, {
@@ -273,7 +273,7 @@ describe('REFUND e ROLLBACK', () => {
     expect(await balanceOf(w)).toEqual({ amount: '100.00', version: 3 });
   });
 
-  test('ROLLBACK depois de REFUND da mesma BET também é rejeitado (reversão única)', async () => {
+  test('ROLLBACK after REFUND of the same BET is also rejected (single reversal)', async () => {
     const w = await openWallet('100.00');
     const bet = await submit(w, { kind: 'BET', amount: '40.00' });
     await submit(w, {
@@ -289,7 +289,7 @@ describe('REFUND e ROLLBACK', () => {
     expect(rollback.body.failureCode).toBe('REFERENCE_ALREADY_REVERSED');
   });
 
-  test('ROLLBACK de WIN debita (inverso da referência)', async () => {
+  test('ROLLBACK of WIN debits (inverse of the reference)', async () => {
     const w = await openWallet('100.00');
     const win = await submit(w, { kind: 'WIN', amount: '30.00' });
     const rollback = await submit(w, {
@@ -302,10 +302,10 @@ describe('REFUND e ROLLBACK', () => {
     expect(await balanceOf(w)).toEqual({ amount: '100.00', version: 3 });
   });
 
-  test('ROLLBACK de WIN já gasto: REVERSAL_INSUFFICIENT_FUNDS, distinto da aposta sem saldo', async () => {
+  test('ROLLBACK of an already-spent WIN: REVERSAL_INSUFFICIENT_FUNDS, distinct from a bet with insufficient funds', async () => {
     const w = await openWallet('0.00');
     const win = await submit(w, { kind: 'WIN', amount: '50.00' });
-    await submit(w, { kind: 'BET', amount: '45.00' }); // gastou o prêmio
+    await submit(w, { kind: 'BET', amount: '45.00' }); // spent the prize
     const rollback = await submit(w, {
       kind: 'ROLLBACK',
       amount: '50.00',
@@ -318,16 +318,16 @@ describe('REFUND e ROLLBACK', () => {
   });
 
   test.each([
-    ['REFUND de WIN', 'REFUND', 'WIN', {}, 'REFERENCE_INVALID_KIND'],
-    ['valor diferente', 'REFUND', 'BET', { amount: '9.99' }, 'AMOUNT_MISMATCH'],
+    ['REFUND of WIN', 'REFUND', 'WIN', {}, 'REFERENCE_INVALID_KIND'],
+    ['different amount', 'REFUND', 'BET', { amount: '9.99' }, 'AMOUNT_MISMATCH'],
     [
-      'outra rodada',
+      'different round',
       'REFUND',
       'BET',
       { roundId: 'round-2' },
       'REFERENCE_CONTEXT_MISMATCH',
     ],
-  ])('422 para %s', async (_, kind, referenceKind, overrides, code) => {
+  ])('422 for %s', async (_, kind, referenceKind, overrides, code) => {
     const w = await openWallet('100.00');
     const reference = await submit(w, { kind: referenceKind, amount: '10.00' });
     const reversal = await submit(w, {
@@ -340,7 +340,7 @@ describe('REFUND e ROLLBACK', () => {
     expect(reversal.body.failureCode).toBe(code);
   });
 
-  test('REFUND antes da BET: 202 PENDING_REFERENCE, sem mexer no saldo', async () => {
+  test('REFUND before the BET: 202 PENDING_REFERENCE, without touching the balance', async () => {
     const w = await openWallet('100.00');
     const { status, body } = await submit(w, {
       kind: 'REFUND',
@@ -361,9 +361,9 @@ describe('REFUND e ROLLBACK', () => {
   });
 });
 
-// ================================================================== outras rejeições e validações
+// ================================================================== other rejections and validations
 
-describe('outras rejeições', () => {
+describe('other rejections', () => {
   test('422 CURRENCY_MISMATCH', async () => {
     const w = await openWallet('100.00');
     const { status, body } = await submit(w, {
@@ -375,7 +375,7 @@ describe('outras rejeições', () => {
     expect(body.failureCode).toBe('CURRENCY_MISMATCH');
   });
 
-  test('422 WALLET_PLAYER_MISMATCH, sem expor o saldo da wallet alheia', async () => {
+  test("422 WALLET_PLAYER_MISMATCH, without exposing another wallet's balance", async () => {
     const w = await openWallet('100.00');
     const { status, body } = await submit(w, {
       kind: 'BET',
@@ -398,23 +398,23 @@ describe('outras rejeições', () => {
 
   test.each([
     [
-      'OPENING submetido',
+      'OPENING submitted',
       { kind: 'OPENING', amount: '1.00' },
       'OPENING_NOT_ALLOWED',
     ],
     [
-      'REFUND sem referência',
+      'REFUND without reference',
       { kind: 'REFUND', amount: '1.00' },
       'REFERENCE_REQUIRED',
     ],
-    ['valor zero', { kind: 'BET', amount: '0.00' }, 'NON_POSITIVE_AMOUNT'],
-    ['valor com 3 casas', { kind: 'BET', amount: '1.005' }, 'INVALID_AMOUNT'],
+    ['zero amount', { kind: 'BET', amount: '0.00' }, 'NON_POSITIVE_AMOUNT'],
+    ['amount with 3 decimal places', { kind: 'BET', amount: '1.005' }, 'INVALID_AMOUNT'],
     [
-      'kind desconhecido',
+      'unknown kind',
       { kind: 'JACKPOT', amount: '1.00' },
       'VALIDATION_ERROR',
     ],
-  ])('400 para %s', async (_, op, code) => {
+  ])('400 for %s', async (_, op, code) => {
     const w = await openWallet('100.00');
     const { status, body } = await submit(w, op);
     expect(status).toBe(400);
@@ -422,10 +422,10 @@ describe('outras rejeições', () => {
   });
 });
 
-// ================================================================== consultas
+// ================================================================== queries
 
-describe('consultas', () => {
-  test('por id interno e por (provider, id externo)', async () => {
+describe('queries', () => {
+  test('by internal id and by (provider, external id)', async () => {
     const w = await openWallet('100.00');
     const bet = await submit(w, { kind: 'BET', amount: '10.00' });
 
@@ -457,10 +457,10 @@ describe('consultas', () => {
   });
 });
 
-// ================================================================== concorrência (prévia da etapa 12)
+// ================================================================== concurrency (preview of step 12)
 
-describe('concorrência', () => {
-  test('cenário do enunciado: 100.00 e duas apostas de 80.00 simultâneas', async () => {
+describe('concurrency', () => {
+  test('scenario from the spec: 100.00 and two simultaneous bets of 80.00', async () => {
     const w = await openWallet('100.00');
     const results = await Promise.all([
       submit(w, { kind: 'BET', amount: '80.00' }),
@@ -484,7 +484,7 @@ describe('concorrência', () => {
     expect(debits!.n).toBe('1');
   });
 
-  test('a mesma aposta 50 vezes em paralelo gera um único débito', async () => {
+  test('the same bet 50 times in parallel generates a single debit', async () => {
     const w = await openWallet('100.00');
     const op = {
       kind: 'BET',

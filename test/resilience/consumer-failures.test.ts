@@ -19,7 +19,7 @@ import { type TestWallet, walletClient } from '@/test/support/wagering-client';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 let db: IsolatedDatabase;
-let apiProcess: AppProcess; // instância só de API: cria wallets e consulta, sem consumir
+let apiProcess: AppProcess; // API-only instance: creates and queries wallets, doesn't consume
 let p: Persistence;
 let api: ReturnType<typeof walletClient>;
 const cleanup: Array<() => Promise<unknown>> = [];
@@ -39,7 +39,7 @@ afterAll(async () => {
   await db?.drop();
 }, 60_000);
 
-/** Registra para limpeza no fim, mesmo se o teste falhar no meio. */
+/** Registers for cleanup at the end, even if the test fails midway. */
 function track<
   T extends { stop?: () => Promise<void>; drop?: () => Promise<void> },
 >(resource: T): T {
@@ -88,7 +88,7 @@ async function count(sql: string, params: unknown[]): Promise<number> {
   return Number(row!.n);
 }
 
-/** Trava a wallet por fora da aplicação; devolve a função que solta o lock. */
+/** Locks the wallet from outside the application; returns the function that releases the lock. */
 async function holdWalletLock(walletId: string): Promise<() => Promise<void>> {
   let release!: () => void;
   const held = new Promise<void>((resolve) => {
@@ -110,8 +110,8 @@ async function holdWalletLock(walletId: string): Promise<() => Promise<void>> {
   };
 }
 
-describe('recuperação do consumer', () => {
-  test('processo morto depois do commit e antes do ack: a reentrega não repete o efeito', async () => {
+describe('consumer recovery', () => {
+  test('process killed after commit and before ack: redelivery does not repeat the effect', async () => {
     const queues: TestQueues = track(
       await createTestQueues({
         visibilityTimeoutSeconds: 3,
@@ -121,7 +121,7 @@ describe('recuperação do consumer', () => {
     const w = await newWallet('100.00');
     const msg = message(w);
 
-    // 1. instância que morre (SIGKILL) logo depois do commit, antes do DeleteMessage
+    // 1. instance that dies (SIGKILL) right after the commit, before DeleteMessage
     const doomed = track(
       await startAppProcess(
         db.appUrl,
@@ -134,13 +134,13 @@ describe('recuperação do consumer', () => {
     await Promise.race([doomed.exited, Bun.sleep(15_000)]);
     expect(doomed.signalCode()).toBe('SIGKILL');
 
-    // 2. o commit aconteceu (débito, transação, inbox)...
+    // 2. the commit happened (debit, transaction, inbox)...
     expect(await statusOf(msg.data.idempotencyKey)).toBe('PROCESSED');
     expect(await api.balanceOf(w)).toEqual({ amount: '75.00', version: 2 });
-    // ...mas o ack não: a mensagem continua na fila
+    // ...but the ack didn't: the message is still in the queue
     expect(await queues.depth()).toBe(1);
 
-    // 3. outra instância recebe a reentrega (após o visibility timeout de 3 s)
+    // 3. another instance receives the redelivery (after the 3s visibility timeout)
     const survivor = track(
       await startAppProcess(db.appUrl, consumerEnv(queues)),
     );
@@ -151,7 +151,7 @@ describe('recuperação do consumer', () => {
     );
     await survivor.stop();
 
-    // 4. um único efeito: nada foi debitado de novo
+    // 4. a single effect: nothing was debited again
     expect(await api.balanceOf(w)).toEqual({ amount: '75.00', version: 2 });
     expect(
       await count(
@@ -168,7 +168,7 @@ describe('recuperação do consumer', () => {
     expect(await queues.deadLetters()).toHaveLength(0);
   }, 60_000);
 
-  test('SIGTERM com mensagem em andamento: termina a atual e devolve as não iniciadas', async () => {
+  test('SIGTERM with a message in flight: finishes the current one and returns the ones not yet started', async () => {
     const queues: TestQueues = track(
       await createTestQueues({
         visibilityTimeoutSeconds: 15,
@@ -182,22 +182,22 @@ describe('recuperação do consumer', () => {
     const consumerA = track(
       await startAppProcess(db.appUrl, consumerEnv(queues)),
     );
-    const releaseLock = await holdWalletLock(w.walletId); // a primeira mensagem vai ficar esperando o lock
+    const releaseLock = await holdWalletLock(w.walletId); // the first message will be left waiting on the lock
 
     await queues.send(first, { groupId: w.walletId });
     await queues.send(second, { groupId: w.walletId });
-    await Bun.sleep(700); // A recebeu e está processando a primeira (bloqueada no lock)
+    await Bun.sleep(700); // A received it and is processing the first one (blocked on the lock)
 
-    const stopping = consumerA.stop(); // SIGTERM com a primeira em andamento
+    const stopping = consumerA.stop(); // SIGTERM with the first one in flight
     await Bun.sleep(500);
-    await releaseLock(); // agora a primeira pode terminar
+    await releaseLock(); // now the first one can finish
     await stopping;
 
-    // a mensagem em andamento foi concluída antes de o processo sair
+    // the in-flight message completed before the process exited
     expect(await statusOf(first.data.idempotencyKey)).toBe('PROCESSED');
     expect(consumerA.output()).toContain('stopped');
 
-    // a não iniciada voltou para a fila na hora (visibilidade 0), não após os 15 s do visibility timeout
+    // the one not yet started went back to the queue right away (visibility 0), not after the 15s visibility timeout
     const startedAt = Date.now();
     const consumerB = track(
       await startAppProcess(db.appUrl, consumerEnv(queues)),
@@ -213,7 +213,7 @@ describe('recuperação do consumer', () => {
     expect(await api.balanceOf(w)).toEqual({ amount: '70.00', version: 3 });
   }, 60_000);
 
-  test('falha transitória persistente: depois de maxReceiveCount tentativas, DLQ com RETRIES_EXHAUSTED', async () => {
+  test('persistent transient failure: after maxReceiveCount attempts, DLQ with RETRIES_EXHAUSTED', async () => {
     const queues: TestQueues = track(
       await createTestQueues({
         visibilityTimeoutSeconds: 10,
@@ -226,7 +226,7 @@ describe('recuperação do consumer', () => {
     const consumer = track(
       await startAppProcess(db.appUrl, consumerEnv(queues)),
     );
-    const releaseLock = await holdWalletLock(w.walletId); // nunca solta durante as tentativas
+    const releaseLock = await holdWalletLock(w.walletId); // never released during the attempts
 
     await queues.send(msg, { groupId: w.walletId });
     await waitFor(
@@ -243,9 +243,9 @@ describe('recuperação do consumer', () => {
     );
     expect(dead!.attributes['receive-count']?.StringValue).toBe('3');
     expect(dead!.attributes['dlq-detail']?.StringValue).toContain('transient');
-    expect(JSON.parse(dead!.body).messageId).toBe(msg.messageId); // o corpo original, intacto
+    expect(JSON.parse(dead!.body).messageId).toBe(msg.messageId); // the original body, untouched
 
-    // nenhuma tentativa deixou rastro: nem transação, nem inbox
+    // no attempt left a trace: no transaction, no inbox
     expect(await statusOf(msg.data.idempotencyKey)).toBeUndefined();
     expect(
       await count(

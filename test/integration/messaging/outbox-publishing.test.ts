@@ -14,7 +14,7 @@ async function pendingCount(t: TestApp): Promise<number> {
   return Number(row!.n);
 }
 
-describe('relay publicando no SQS', () => {
+describe('relay publishing to SQS', () => {
   let queues: TestQueues;
   let t: TestApp;
 
@@ -28,7 +28,7 @@ describe('relay publicando no SQS', () => {
     await queues?.drop();
   }, 30_000);
 
-  test('uma aposta pela API vira eventos no wallet-events.fifo, depois do commit', async () => {
+  test('a bet via the API turns into events on wallet-events.fifo, after commit', async () => {
     const api = walletClient(t.request);
     const { wallet } = await api.openWallet('100.00');
     const bet = await api.submit(wallet, { kind: 'BET', amount: '25.00' });
@@ -44,8 +44,8 @@ describe('relay publicando no SQS', () => {
       'WalletBalanceChanged',
     ]);
     for (const event of ofBet) {
-      expect(event.groupId).toBe(wallet.walletId); // ordem por wallet
-      expect(event.deduplicationId).toBe(event.body.eventId); // deduplicação pelo eventId
+      expect(event.groupId).toBe(wallet.walletId); // order by wallet
+      expect(event.deduplicationId).toBe(event.body.eventId); // deduplication by eventId
       expect(event.body.aggregateId).toBe(wallet.walletId);
     }
     const balanceChanged = ofBet.find(
@@ -59,7 +59,7 @@ describe('relay publicando no SQS', () => {
     });
   });
 
-  test('o corpo publicado é exatamente o envelope gravado na outbox', async () => {
+  test('the published body is exactly the envelope stored in the outbox', async () => {
     const api = walletClient(t.request);
     const { wallet } = await api.openWallet('10.00');
     await waitFor(async () => (await pendingCount(t)) === 0, 'outbox drained');

@@ -2,7 +2,7 @@ import { NoOpProviderIdentityAdapter } from '@/src/platform/auth/no-op-provider-
 import { describe, expect, test } from 'bun:test';
 
 describe('NoOpProviderIdentityAdapter', () => {
-  test('devolve sempre a mesma identidade fictícia, com ou sem token', async () => {
+  test('always returns the same fake identity, with or without a token', async () => {
     const adapter = new NoOpProviderIdentityAdapter();
     const expected = {
       subject: 'local-service-account',
@@ -11,7 +11,7 @@ describe('NoOpProviderIdentityAdapter', () => {
     };
 
     expect(await adapter.authenticate()).toEqual(expected);
-    expect(await adapter.authenticate('qualquer-coisa')).toEqual(expected);
+    expect(await adapter.authenticate('anything')).toEqual(expected);
     expect(await adapter.authenticate('')).toEqual(expected);
   });
 });

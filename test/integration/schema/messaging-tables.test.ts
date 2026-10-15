@@ -47,19 +47,19 @@ function insertOutbox(
 }
 
 describe('inbox_messages', () => {
-  test('a mesma mensagem não é registrada duas vezes pelo mesmo consumidor', async () => {
+  test('the same message is not recorded twice by the same consumer', async () => {
     await insertInbox('wager-transactions', 'msg-dup');
     expect(await sqlState(insertInbox('wager-transactions', 'msg-dup'))).toBe(
       '23505',
     );
   });
 
-  test('consumidores diferentes deduplicam de forma independente', async () => {
+  test('different consumers deduplicate independently', async () => {
     await insertInbox('wager-transactions', 'msg-shared');
     expect(await sqlState(insertInbox('audit', 'msg-shared'))).toBeUndefined();
   });
 
-  test('ON CONFLICT DO NOTHING sinaliza duplicata com zero linhas, sem erro', async () => {
+  test('ON CONFLICT DO NOTHING signals duplicate with zero rows, no error', async () => {
     await insertInbox('wager-transactions', 'msg-replay');
     const { rowCount } = await app.query(
       `INSERT INTO inbox_messages (consumer_name, message_id, payload_hash)
@@ -71,7 +71,7 @@ describe('inbox_messages', () => {
     expect(rowCount).toBe(0);
   });
 
-  test('payload_hash precisa ser SHA-256 em hex', async () => {
+  test('payload_hash must be SHA-256 in hex', async () => {
     expect(
       await sqlState(
         insertInbox('wager-transactions', 'msg-bad-hash', 'nao-e-hash'),
@@ -81,15 +81,15 @@ describe('inbox_messages', () => {
 });
 
 describe('outbox_messages', () => {
-  test('attempts não pode ser negativo', async () => {
+  test('attempts cannot be negative', async () => {
     expect(await sqlState(insertOutbox({ attempts: -1 }))).toBe('23514');
   });
 
-  test('event_version começa em 1', async () => {
+  test('event_version starts at 1', async () => {
     expect(await sqlState(insertOutbox({ eventVersion: 0 }))).toBe('23514');
   });
 
-  test('evento recém-gravado já está disponível para o relay', async () => {
+  test('a freshly written event is immediately available to the relay', async () => {
     const id = crypto.randomUUID();
     await app.query(
       `INSERT INTO outbox_messages (id, aggregate_id, event_type, event_version, payload, occurred_at)

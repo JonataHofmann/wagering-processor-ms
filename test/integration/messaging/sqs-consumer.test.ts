@@ -27,7 +27,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (t) expect(await walletsInconsistentWithLedger(t.db.appUrl)).toEqual([]);
   await p?.close();
-  await t?.close(); // para o consumer antes de fechar o banco
+  await t?.close(); // stops the consumer before closing the database
   await queues?.drop();
 }, 30_000);
 
@@ -77,8 +77,8 @@ async function queueDrained(): Promise<void> {
   );
 }
 
-describe('consumer SQS ponta a ponta', () => {
-  test('mensagem válida: processada pelo caso de uso e apagada da fila', async () => {
+describe('end-to-end SQS consumer', () => {
+  test('valid message: processed by the use case and deleted from the queue', async () => {
     const w = await newWallet('100.00');
     const msg = message(w);
     await queues.send(msg, { groupId: w.walletId });
@@ -92,7 +92,7 @@ describe('consumer SQS ponta a ponta', () => {
     await queueDrained();
     expect(await api.balanceOf(w)).toEqual({ amount: '75.00', version: 2 });
 
-    // histograma de duração de processamento populado de verdade pelo loop real do consumer
+    // processing duration histogram genuinely populated by the real consumer loop
     const processed = metrics
       .snapshot()
       .find(
@@ -106,11 +106,11 @@ describe('consumer SQS ponta a ponta', () => {
     ).toBeGreaterThan(0);
   });
 
-  test('a mesma mensagem enviada duas vezes: um único efeito, as duas apagadas', async () => {
+  test('the same message sent twice: a single effect, both deleted', async () => {
     const w = await newWallet('100.00');
     const msg = message(w);
     await queues.send(msg, { groupId: w.walletId });
-    await queues.send(msg, { groupId: w.walletId }); // outro deduplicationId: o SQS entrega as duas
+    await queues.send(msg, { groupId: w.walletId }); // different deduplicationId: SQS delivers both
 
     await waitFor(
       async () =>
@@ -129,7 +129,7 @@ describe('consumer SQS ponta a ponta', () => {
     expect(inbox!.n).toBe('1');
   });
 
-  test('rejeição de negócio: REJECTED gravada e mensagem apagada (não vai para a DLQ)', async () => {
+  test('business rejection: REJECTED recorded and message deleted (does not go to the DLQ)', async () => {
     const w = await newWallet('10.00');
     const msg = message(w, { money: { amount: '50.00', currency: 'BRL' } });
     await queues.send(msg, { groupId: w.walletId });
@@ -146,7 +146,7 @@ describe('consumer SQS ponta a ponta', () => {
     ).toBe('INSUFFICIENT_FUNDS');
   });
 
-  test('mensagens do mesmo grupo (wallet) são processadas em ordem', async () => {
+  test('messages from the same group (wallet) are processed in order', async () => {
     const w = await newWallet('100.00');
     const first = message(w, { money: { amount: '80.00', currency: 'BRL' } });
     const second = message(w, { money: { amount: '30.00', currency: 'BRL' } });
@@ -167,7 +167,7 @@ describe('consumer SQS ponta a ponta', () => {
     });
   });
 
-  test('mensagem inválida: vai direto para a DLQ com o motivo, sem retry', async () => {
+  test('invalid message: goes straight to the DLQ with the reason, no retry', async () => {
     const dlqBefore = metrics.value('sqs_dead_letter_messages_total', {
       queue: queues.config.queues.wagerTransactions,
       reason: 'INVALID_MESSAGE',
@@ -180,11 +180,11 @@ describe('consumer SQS ponta a ponta', () => {
     );
     const [dead] = await queues.deadLetters();
     expect(dead!.attributes['dlq-reason']?.StringValue).toBe('INVALID_MESSAGE');
-    expect(dead!.attributes['receive-count']?.StringValue).toBe('1'); // primeira tentativa: sem retry
+    expect(dead!.attributes['receive-count']?.StringValue).toBe('1'); // first attempt: no retry
     await queueDrained();
-    // >= (não ===): SQS é at-least-once de verdade — sob carga, a mesma mensagem
-    // pode ser recebida mais de uma vez antes do delete, e cada entrega gera seu
-    // próprio dead-letter corretamente (não é bug, é o modelo de entrega do SQS).
+    // >= (not ===): SQS is genuinely at-least-once — under load, the same message
+    // may be received more than once before the delete, and each delivery correctly
+    // generates its own dead-letter (not a bug, it's SQS's delivery model).
     expect(
       metrics.value('sqs_dead_letter_messages_total', {
         queue: queues.config.queues.wagerTransactions,
@@ -193,7 +193,7 @@ describe('consumer SQS ponta a ponta', () => {
     ).toBeGreaterThanOrEqual(dlqBefore + 1);
   });
 
-  test('falha transitória: a mensagem volta para a fila e é processada quando a wallet é liberada', async () => {
+  test('transient failure: the message goes back to the queue and is processed once the wallet is released', async () => {
     const w = await newWallet('100.00');
     const msg = message(w);
 
@@ -216,7 +216,7 @@ describe('consumer SQS ponta a ponta', () => {
       queue: queues.config.queues.wagerTransactions,
     });
     await queues.send(msg, { groupId: w.walletId });
-    await Bun.sleep(2_500); // a primeira tentativa estoura o lock_timeout (2 s) → retry
+    await Bun.sleep(2_500); // the first attempt exceeds the lock_timeout (2s) → retry
     expect(await transactionStatus(msg.data.idempotencyKey)).toBeUndefined();
     expect(
       metrics.value('sqs_message_retries_total', {
